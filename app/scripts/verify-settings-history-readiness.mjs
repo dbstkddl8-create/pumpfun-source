@@ -91,9 +91,10 @@ assert.deepEqual(record.uniqueCoverage, {
   wholeSuitePassClaimed: false,
 });
 const after = await readFile(path.join(folder, "after-suite.log"), "utf8");
-assert.match(after, /9 passed/);
-assert.match(after, /1 failed/);
-assert.match(after, /5 did not run/);
+// Whole summary counts: "19 passed" or "11 failed" must not satisfy the claim.
+assert.match(after, /^ *9 passed\b/m);
+assert.match(after, /^ *1 failed *$/m);
+assert.match(after, /^ *5 did not run *$/m);
 assert.match(after, /Escape and repeated reopening/);
 console.log(
   JSON.stringify({
