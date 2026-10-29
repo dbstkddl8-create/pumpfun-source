@@ -27,7 +27,9 @@ function integer(
   maximum: number,
 ): number | undefined {
   if (value === undefined) return undefined;
-  if (!/^-?(?:0|[1-9]\d*)$/.test(value)) throw new QueryError();
+  // Canonical decimal only: '-0' would otherwise alias 0 for page, updatesLimit
+  // and chainId, as '00' and '+0' already cannot.
+  if (!/^(?:0|-?[1-9]\d*)$/.test(value)) throw new QueryError();
   const number = Number(value);
   if (!Number.isSafeInteger(number) || number < minimum || number > maximum)
     throw new QueryError();
