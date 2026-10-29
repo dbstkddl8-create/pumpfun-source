@@ -199,9 +199,10 @@ export async function recover(root = APP_ROOT) {
 }
 export async function verify(root = APP_ROOT) {
   const value = await recover(root);
-  assert.deepEqual(
-    JSON.parse(await readFile(path.join(root, OUTPUT))),
-    value,
+  // VALIDATION.json pins the contract's sha256, so compare the exact --write bytes.
+  assert.equal(
+    await readFile(path.join(root, OUTPUT), "utf8"),
+    JSON.stringify(value, null, 2) + "\n",
     "positions-by-mint contract is stale",
   );
   return value;
