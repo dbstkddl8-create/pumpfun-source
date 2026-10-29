@@ -147,6 +147,9 @@ export function decodeCursor(cursor: unknown): { createdAt: string; postId: stri
     // Buffer's base64 decoder silently ignores junk and accepts alternate
     // encodings. Require the unchanged encoder's alphabet and trailing bits.
     if (typeof cursor !== 'string' || !/^[A-Za-z0-9_-]+$/.test(cursor)) return null;
+    // The replies/quotes contract declares cursor maxLength 200 (ASCII here, so
+    // UTF-16 length equals the character count).
+    if (cursor.length > 200) return null;
     const bytes = Buffer.from(cursor, 'base64url');
     if (bytes.toString('base64url') !== cursor) return null;
     const raw = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
