@@ -28,12 +28,20 @@ export function registerUserTradesRoutes(
           throw new TradesQueryError();
         qs.set(key, value);
       }
-      if (qs.has("chain"))
+      if (qs.has("chain")) {
+        // Every documented chain lane is keyed by chain alone and serves trades
+        // only, so these combinations are request errors before lane support.
+        if (
+          qs.has("chainId") ||
+          qs.get("types")?.split(",").includes("transfers")
+        )
+          throw new TradesQueryError();
         return reply.code(501).send({
           statusCode: 501,
           error: "COMPATIBILITY_NOT_IMPLEMENTED",
           reason: "TRADES_CHAIN_LANE_UNAVAILABLE",
         });
+      }
       const opts: UserTradesOptions = {};
       for (const name of ["chainId", "limit"] as const) {
         if (qs.has(name)) {
