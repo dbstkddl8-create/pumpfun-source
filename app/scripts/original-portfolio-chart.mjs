@@ -91,7 +91,8 @@ export async function recover(root = APP_ROOT) {
 
 export async function verify(root = APP_ROOT) {
   const fresh = await recover(root);
-  assert.deepEqual(JSON.parse(await readFile(path.join(root, OUTPUT))), fresh, "portfolio chart contract is stale");
+  // VALIDATION.json pins the contract's sha256, so compare the exact --write bytes.
+  assert.equal(await readFile(path.join(root, OUTPUT), "utf8"), JSON.stringify(fresh, null, 2) + "\n", "portfolio chart contract is stale");
   return fresh;
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
