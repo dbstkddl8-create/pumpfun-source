@@ -199,8 +199,10 @@ function toFollowRow(edge: FollowEdge, user: User): FollowRow {
     profile_image: user.profile_image,
     resolved_avatar_decoration: user.resolved_avatar_decoration ?? null,
     address: user.address,
-    userId: user.userId ?? user.address,
-    user_id: user.userId ?? user.address,
+    // A blank userId is not an identity (UserStore does not index it), so it
+    // falls back to the wallet like an absent one instead of emitting ''.
+    userId: user.userId || user.address,
+    user_id: user.userId || user.address,
     kind: user.kind ?? 'person',
     timestamp: edge.timestamp,
     followers: user.followers,
