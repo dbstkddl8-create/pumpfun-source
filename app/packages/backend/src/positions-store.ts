@@ -220,8 +220,12 @@ function spot(row: {
     (row.chain !== undefined && !spotChain.test(row.chain))
   )
     fail("only materialized Solana/EVM spot-token rows are supported");
-  if (row.chainId !== null && !Number.isSafeInteger(row.chainId))
-    fail("chainId must be a safe integer or null");
+  // The contract reserves chainId 0 for HyperCore/ton:-239 rows; spot chains are positive.
+  if (
+    row.chainId !== null &&
+    (!Number.isSafeInteger(row.chainId) || row.chainId <= 0)
+  )
+    fail("chainId must be a positive safe integer or null");
 }
 
 /**
