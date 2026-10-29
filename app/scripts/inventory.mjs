@@ -250,9 +250,10 @@ export async function buildInventory(
   const operations = {
     notice:
       "Static candidate operations; includes shared/excluded/admin code. Never probe privileged routes automatically.",
+    // Pinned locale: the default follows LANG, and e.g. Czech sorts "ch" after "h".
     operations: [
       ...new Map(routes.map((route) => [route.operation, route])).values(),
-    ].sort((a, b) => a.operation.localeCompare(b.operation)),
+    ].sort((a, b) => a.operation.localeCompare(b.operation, "en")),
     occurrences: routes,
   };
   const reportFiles = new Map([
