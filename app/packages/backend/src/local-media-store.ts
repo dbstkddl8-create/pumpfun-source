@@ -153,12 +153,14 @@ function metadata(input: unknown): { imageId: string; value: LocalMetadata } {
 
 // Signatures reject obvious MIME spoofing; this is NOT a decoder, scanner or sanitizer.
 function imageType(bytes: Buffer): ImageType | undefined {
+  // PNG dimensions are limited to 1..2^31-1; a signed read rejects zero and
+  // values with the high bit set in one comparison.
   if (
     bytes.length >= 24 &&
     bytes.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex")) &&
     bytes.subarray(12, 16).equals(Buffer.from("IHDR")) &&
-    bytes.readUInt32BE(16) > 0 &&
-    bytes.readUInt32BE(20) > 0
+    bytes.readInt32BE(16) > 0 &&
+    bytes.readInt32BE(20) > 0
   )
     return "image/png";
   if (
