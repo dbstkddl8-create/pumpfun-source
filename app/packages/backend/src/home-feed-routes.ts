@@ -298,6 +298,9 @@ export function registerHomeFeedRoutes(
       if (platform !== undefined && platform !== "WEB" && platform !== "APP") {
         throw new HomeFeedRequestError(400, "INVALID_PLATFORM", "platform");
       }
+      // Validate filters with every other supplied value, so a malformed
+      // filter is a 400 even when a personalization hint is also present.
+      const filters = parseFilters(query, { calloutMarketCap: false });
       const unsupported = [
         "userId",
         "session_id",
@@ -319,7 +322,7 @@ export function registerHomeFeedRoutes(
         );
       }
       const response = store.ranked({
-        filters: parseFilters(query, { calloutMarketCap: false }),
+        filters,
         page,
         pageSize,
         pageToken,
