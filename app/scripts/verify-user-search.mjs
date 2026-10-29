@@ -28,8 +28,11 @@ export function normalizeUserSearch(node, roles, imports = {}) {
   }
   function lookup(name, scopes) {
     for (let i = scopes.length - 1; i >= 0; i--) if (scopes[i].has(name)) return scopes[i].get(name);
-    if (!roles[name]) unresolved.add(name);
-    return roles[name] ?? `UNRESOLVED:${name}`;
+    // Inherited names such as toString would resolve to functions that vanish
+    // from the JSON fingerprint; only caller-supplied roles count.
+    const role = Object.hasOwn(roles, name) ? roles[name] : undefined;
+    if (!role) unresolved.add(name);
+    return role ?? `UNRESOLVED:${name}`;
   }
   function visit(value, scopes = [], parent, key) {
     if (!value || typeof value !== 'object') return value;
