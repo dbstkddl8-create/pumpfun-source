@@ -357,6 +357,7 @@ export class CalloutsStore {
         assertSchema(row.facts, factsSchema, "callout facts", spec);
         publicSpot(row.facts);
         if (row.facts.createdAt !== null && row.facts.createdAt > Date.parse(this.observedAt)) fail("callout timestamp exceeds observedAt");
+        if (row.facts.maxMultiplierAt != null && Date.parse(row.facts.maxMultiplierAt) > Date.parse(this.observedAt)) fail("callout maxMultiplierAt exceeds observedAt");
         if (row.facts.calloutId !== row.calloutId)
           fail("callout identity mismatch");
         identity(row.facts.userId, "posting wallet");
@@ -369,6 +370,8 @@ export class CalloutsStore {
       if (row.quoteFacts !== undefined) {
         assertSchema(row.quoteFacts, quoteFactsSchema, "quote facts", spec);
         publicSpot(row.quoteFacts);
+        for (const at of [row.quoteFacts.calloutTimestamp, row.quoteFacts.maxMultiplierAt])
+          if (at != null && Date.parse(at) > Date.parse(this.observedAt)) fail("quote timestamp exceeds observedAt");
         if (!row.facts || row.quoteFacts.calloutId !== row.calloutId)
           fail("quote projection identity mismatch");
         if (
