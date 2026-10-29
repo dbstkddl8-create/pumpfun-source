@@ -120,6 +120,8 @@ export function decodeSearchLoader(factory) {
   expect(loader?.type === 'ArrowFunctionExpression' && loader.params.length === 1 && loader.params[0].type === 'Identifier', 'loader callback');
   const then = loader.body;
   expect(then.type === 'CallExpression' && then.callee.type === 'MemberExpression' && propertyName(then.callee.property) === 'then', 'loader then');
+  // A second then() callback would swallow chunk load failures.
+  expect(then.arguments.length === 1, 'loader then without rejection handler');
   const promiseAll = then.callee.object;
   expect(promiseAll.type === 'CallExpression' && member(promiseAll.callee, 'Promise', 'all'), 'loader Promise.all');
   const map = promiseAll.arguments[0];
@@ -128,7 +130,7 @@ export function decodeSearchLoader(factory) {
   const mapper = map.arguments[0];
   expect(mapper?.type === 'ArrowFunctionExpression' && mapper.params[0]?.type === 'Identifier' &&
     mapper.body.type === 'CallExpression' && member(mapper.body.callee, factory.runtime, 'l') &&
-    mapper.body.arguments[0]?.type === 'Identifier' && mapper.body.arguments[0].name === mapper.params[0].name,
+    mapper.body.arguments.length === 1 && mapper.body.arguments[0]?.type === 'Identifier' && mapper.body.arguments[0].name === mapper.params[0].name,
   'loader calls actual runtime.l for each literal');
   const loaded = then.arguments[0];
   expect(loaded?.type === 'ArrowFunctionExpression' && loaded.params.length === 0 &&
