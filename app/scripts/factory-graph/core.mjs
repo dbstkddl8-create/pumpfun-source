@@ -207,9 +207,13 @@ export function analyzeFactory(source, label = "factory") {
       throw new Error(`malformed factory ${label}: ${error.message}`);
     }
   }
-  const expression = ast.program.body.find(
-    (entry) => entry.type === "ExpressionStatement",
-  )?.expression;
+  // The canonical digest covers only this expression, so any other top-level
+  // statement would ride along unauthenticated.
+  const [statement, ...rest] = ast.program.body;
+  const expression =
+    statement?.type === "ExpressionStatement" && !rest.length
+      ? statement.expression
+      : undefined;
   if (
     !expression ||
     !["ArrowFunctionExpression", "FunctionExpression"].includes(expression.type)
