@@ -386,6 +386,12 @@ export async function compareInventory(expandedPath, appRoot = APP_ROOT) {
   const expandedBytes = await readFile(expandedPath);
   const current = JSON.parse(currentBytes);
   const expanded = JSON.parse(expandedBytes);
+  // Origin start/end offsets are only comparable under the same encoding.
+  assert.equal(
+    expanded.rangeEncoding,
+    current.rangeEncoding,
+    "expanded inventory range encoding differs",
+  );
   assert.deepEqual(
     selectedEntries(current),
     selectedEntries(expanded),
