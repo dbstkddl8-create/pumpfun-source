@@ -1,4 +1,4 @@
-import { closeSync, constants, fstatSync, openSync, readSync } from "node:fs";
+import { closeSync, constants, fstatSync, lstatSync, openSync, readSync } from "node:fs";
 
 export type PayoutPeriod = "1d" | "1w" | "1m";
 export type PayoutStatus =
@@ -385,6 +385,10 @@ export function loadPayoutsStore(
   path: string | undefined,
 ): PayoutsStore | undefined {
   if (!path) return undefined;
+  // O_NOFOLLOW is undefined on Windows, so the open flag alone does not reject
+  // a symlinked path there. Check the path itself and bind the opened handle to it.
+  const linkStat = lstatSync(path, { bigint: true });
+  if (linkStat.isSymbolicLink() || !linkStat.isFile()) invalid("file type/size");
   const fd = openSync(
     path,
     constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
@@ -392,6 +396,8 @@ export function loadPayoutsStore(
   try {
     const stat = fstatSync(fd);
     if (!stat.isFile() || stat.size > MAX_FILE_BYTES) invalid("file type/size");
+    const opened = fstatSync(fd, { bigint: true });
+    if (opened.dev !== linkStat.dev || opened.ino !== linkStat.ino) invalid("file type/size");
     const buffer = Buffer.alloc(MAX_FILE_BYTES + 1);
     let size = 0;
     while (size < buffer.length) {
