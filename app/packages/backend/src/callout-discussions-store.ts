@@ -169,6 +169,8 @@ function parse(query: URLSearchParams) {
   }
   const limit = integer(query.get("limit") ?? "30", 1);
   const nestedLimit = Math.min(10, integer(query.get("nestedLimit") ?? "0", 0));
+  // A malformed page is a bad request even though offset pages are unavailable.
+  if (query.has("page")) integer(query.get("page")!, 0);
   const filter = query.get("filter") ?? "ALL",
     sort = query.get("sort") ?? "RECENCY";
   if (
