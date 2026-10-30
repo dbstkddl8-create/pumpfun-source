@@ -14,6 +14,8 @@ def protected_inputs(script):
 script=args.script.expanduser().resolve();paths=protected_inputs(script)
 for path in paths:
     if same_file(args.receipt,path):p.error('receipt path aliases protected input: '+str(path))
+# Bind the bytes this run starts from, not whatever the paths hold when it ends.
+input_sha256={str(p):hashlib.sha256(p.read_bytes()).hexdigest()for p in paths}
 args.receipt=args.receipt.expanduser().resolve();loader.install();sys.path.insert(0,str(script.parent));sys.argv=[str(script),*args.arguments]
 # The receipt is also written after a failed harness run, so it must say so:
 # without an explicit marker a crashed run is indistinguishable from a
@@ -32,7 +34,7 @@ else:
     completed=True
 finally:
     try:
-        record={'scope':loader.__doc__,'harness':str(script),'input_sha256':{str(p):hashlib.sha256(p.read_bytes()).hexdigest()for p in paths},'loads':loader.LOADS,'ok':completed}
+        record={'scope':loader.__doc__,'harness':str(script),'input_sha256':input_sha256,'loads':loader.LOADS,'ok':completed}
         if failure is not None:record['error']=failure
         args.receipt.parent.mkdir(parents=True,exist_ok=True);args.receipt.write_text(json.dumps(record,indent=2)+'\n')
     except OSError:
