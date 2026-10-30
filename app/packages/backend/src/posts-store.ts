@@ -310,10 +310,13 @@ export class PostStore {
     const result: Post[] = [];
 
     for (const id of ids) {
-      if (seen.has(id)) continue;
-      seen.add(id);
+      // UUIDs compare case-insensitively and the batch ids pattern admits A-F,
+      // so an uppercase spelling names the same (lowercase) stored post.
+      const key = id.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
 
-      const raw = this.byPostId.get(id);
+      const raw = this.byPostId.get(id) ?? this.byPostId.get(key);
       if (raw && this.isServed(raw)) {
         result.push(this.hydrate(raw));
       }
