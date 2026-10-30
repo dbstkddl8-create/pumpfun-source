@@ -14,6 +14,10 @@ test("recovered factories cannot carry extra top-level statements", async () => 
     () => analyzeFactory(`globalThis.injected=1;\n((e)=>{e.s(["v",0,1],2)});\n`),
     /does not contain a top-level function expression/,
   );
+  assert.throws(
+    () => analyzeFactory(`"use strict";\n(function(runtime) { return this; });`),
+    /does not contain a top-level function expression/,
+  );
 
   const root = await fixture();
   try {

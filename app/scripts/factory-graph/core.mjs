@@ -208,10 +208,12 @@ export function analyzeFactory(source, label = "factory") {
     }
   }
   // The canonical digest covers only this expression, so any other top-level
-  // statement would ride along unauthenticated.
+  // statement or directive would ride along unauthenticated.
   const [statement, ...rest] = ast.program.body;
   const expression =
-    statement?.type === "ExpressionStatement" && !rest.length
+    statement?.type === "ExpressionStatement" &&
+    !rest.length &&
+    !ast.program.directives.length
       ? statement.expression
       : undefined;
   if (
