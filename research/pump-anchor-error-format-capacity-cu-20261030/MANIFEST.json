@@ -1,0 +1,39 @@
+{
+ "files": [
+  {
+   "path": "README.md",
+   "sha256": "d37a646342635b9999a0827ed0e960556c213a23fca31ea9f7f208711557df60",
+   "bytes": 7054
+  },
+  {
+   "path": "producer.py",
+   "sha256": "e411eda5315712e9bd548534737d4a61bf46dbcf3b39dd5e0cd767cd5d315605",
+   "bytes": 40948
+  },
+  {
+   "path": "runtime/merged-sites.json.gz",
+   "sha256": "b10b5220e3276c8e36e671cfde48f35c398edeeff6367029c08ca71fce583b46",
+   "bytes": 2640
+  },
+  {
+   "path": "runtime/plan.json.gz",
+   "sha256": "75fbef0f748423e4e8e8acfc8518597d7b05376fcf3b92f7b4c8d12c2beb0a73",
+   "bytes": 2390
+  },
+  {
+   "path": "runtime/receipts.jsonl.gz",
+   "sha256": "07c7c863cf0685bd713e57c5215cd8db2b67d232ebfe70e691fdd1d9543b13a1",
+   "bytes": 8961
+  },
+  {
+   "path": "runtime/report.json.gz",
+   "sha256": "bc91c42bd30e7d0d3ac065d244448f6d3d20542e467a65cc27904c0e5dc39e1f",
+   "bytes": 2375
+  },
+  {
+   "path": "verify.py",
+   "sha256": "007e271145d7ef2d308e0e8a609f3232588d9bf7be0ac1b20342fbdbf85a5fac",
+   "bytes": 3227
+  }
+ ]
+}
