@@ -7,6 +7,7 @@ Matching a local window does not prove its runtime callee or data referents.
 import argparse
 import csv
 import hashlib
+import io
 import json
 from pathlib import Path
 
@@ -74,7 +75,9 @@ def main():
         raw = function_body(candidate, candidate_sections, address, size)
         counterparts.setdefault((size, sha(raw)), []).append({'address':address, 'symbol':name})
     rows = []
-    with windows.open() as stream:
+    # Hash the parsed bytes, not a later re-read of the inventory path.
+    window_bytes = windows.read_bytes()
+    with io.TextIOWrapper(io.BytesIO(window_bytes)) as stream:
         bounds = selected_windows(stream)
     for start, end in bounds:
         raw = function_body(original, original_sections, start, end-start)
@@ -85,7 +88,7 @@ def main():
     assert rows[0]['original_start']==os['addr'] and rows[-1]['original_end']==os['addr']+os['size']
     assert all(a['original_end']==b['original_start'] for a,b in zip(rows,rows[1:]))
     result={'scope':__doc__,'original_sha256':sha(original),'candidate_sha256':sha(candidate),
-            'window_inventory_sha256':sha(windows.read_bytes()),'script_sha256':sha(Path(__file__).read_bytes()),
+            'window_inventory_sha256':sha(window_bytes),'script_sha256':sha(Path(__file__).read_bytes()),
             'helper_sha256':sha((ROOT/'scripts/pump_quote_control_function_match.py').read_bytes()),
             'objdump_sha256':sha(Path(args.objdump).read_bytes()),
             'candidate_bytes':len(candidate),'original_text_bytes':os['size'],
