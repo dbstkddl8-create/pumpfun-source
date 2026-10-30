@@ -1,0 +1,34 @@
+{
+ "files": [
+  {
+   "path": "README.md",
+   "sha256": "c563c0c3d4d0a410a45c4d584269da78cadae90b52f1f3372ec15fe7a93d0c36",
+   "bytes": 6521
+  },
+  {
+   "path": "producer.py",
+   "sha256": "96cfafede0fbc78a0d4410804be012891284e32a3e5cdf1342352c09f259b287",
+   "bytes": 36773
+  },
+  {
+   "path": "runtime/plan.json.gz",
+   "sha256": "7dc090a2eae72155265bed465032bdc76f1911303f590775ded162dd4ccfee7b",
+   "bytes": 11889
+  },
+  {
+   "path": "runtime/receipts-upgradeable.jsonl.gz",
+   "sha256": "454e396642b4eebcd8509971ea62c4bbd1be49f0a37cec0ae7a875ee576020d2",
+   "bytes": 52246
+  },
+  {
+   "path": "runtime/report.json.gz",
+   "sha256": "0c7e4f6939532b7a9b5e7a5199054638c27cd4d55ecd82eed626d5e1442ebd4d",
+   "bytes": 11356
+  },
+  {
+   "path": "verify.py",
+   "sha256": "9d02284d05c429e6aa0303bfbec400810443a5bdc3cd8b984b05ff218ca9b929",
+   "bytes": 4382
+  }
+ ]
+}
