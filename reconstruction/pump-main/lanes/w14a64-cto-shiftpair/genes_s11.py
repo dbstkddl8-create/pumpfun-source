@@ -174,7 +174,8 @@ def lfx(site,label,mode=''):
     def g(s):
         i=s.index(SITES[site]); assert s.count(SITES[site])==1
         m=re.compile(r'([,{])'+label+r':a\.(\w+)\.to_account_info\(\)').search(s,i)
-        assert m and m.start()<s.index('}',i)+1+0 or True
+        end=s.find('}',i)
+        assert m and end>=0 and m.start()<end, f'{site}:{label} is not inside the accounts literal'
         acct=m.group(2); expr=f'a.{acct}.as_ref()'+('.as_ref()' if 'aa' in mode else '')
         return s[:m.start()+1]+label+':'+lf_text(expr,'ROLKWSED','dl' in mode)+s[m.end():]
     return [g]
