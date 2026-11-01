@@ -19,7 +19,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 RESEARCH = ROOT / 'research'
 PACKET = RESEARCH / 'pump-trade-cu-scaling-20261030'
+FEE_PACKET = RESEARCH / 'pump-fees-authority-transition-sequences-20261029'
 MARKER = 'packet file set differs from MANIFEST.json'
+MEMBER = 'packet member differs from MANIFEST.json'
 WALKS = ('rglob(', 'iterdir(', 'os.walk(', 'os.scandir(')
 
 
@@ -28,6 +30,13 @@ def verifiers():
         text = path.read_text(encoding='utf-8')
         if 'MANIFEST.json' in text:
             yield path, text
+
+
+def manifests():
+    """Packets that ship a MANIFEST.json, whatever their verifier does with it."""
+    for path in sorted(RESEARCH.glob('*/verify.py')):
+        if any(entry.name == 'MANIFEST.json' for entry in path.parent.iterdir()):
+            yield path, path.read_text(encoding='utf-8')
 
 
 def run(packet):
@@ -65,6 +74,33 @@ class PacketManifestCensus(unittest.TestCase):
             result = run(packet)
         self.assertNotIn(MARKER, result.stdout + result.stderr)
         self.assertIn('/nonexistent/', result.stdout + result.stderr)
+
+    def test_every_packet_that_ships_a_manifest_reads_it(self):
+        """Publishing a file record and never consulting it records nothing."""
+        unread = [str(path.relative_to(ROOT)) for path, text in manifests()
+                  if 'MANIFEST.json' not in text]
+        self.assertEqual([], unread)
+
+    def test_altered_packet_member_is_refused_before_any_image_is_read(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            packet = Path(tmp) / 'packet'
+            shutil.copytree(FEE_PACKET, packet)
+            (packet / 'README.md').write_bytes(b'altered packet member\n')
+            result = run(packet)
+        self.assertEqual(1, result.returncode)
+        self.assertIn(f'{MEMBER}: README.md', result.stdout + result.stderr)
+        self.assertNotIn('/nonexistent/', result.stdout + result.stderr)
+
+    def test_added_packet_member_is_refused_before_any_image_is_read(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            packet = Path(tmp) / 'packet'
+            shutil.copytree(FEE_PACKET, packet)
+            (packet / 'runtime' / 'unlisted.bin').write_bytes(b'\x00')
+            result = run(packet)
+        self.assertEqual(1, result.returncode)
+        self.assertIn(MARKER, result.stdout + result.stderr)
+        self.assertIn('runtime/unlisted.bin', result.stdout + result.stderr)
+        self.assertNotIn('/nonexistent/', result.stdout + result.stderr)
 
 
     def test_nested_manifest_name_is_not_an_ignored_file(self):
