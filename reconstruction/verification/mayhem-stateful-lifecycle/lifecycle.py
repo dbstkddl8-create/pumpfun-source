@@ -2,6 +2,9 @@
 """Deterministic persistent Mayhem LiteSVM fixture and signed transaction executor."""
 from __future__ import annotations
 
+if not __debug__:
+    raise SystemExit("Normal Python is required; do not use -O or PYTHONOPTIMIZE.")
+
 import base64
 import hashlib
 import json
