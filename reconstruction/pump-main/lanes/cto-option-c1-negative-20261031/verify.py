@@ -20,6 +20,17 @@ def js(b): return json.loads(b)
 def safe(name):
     p=PurePosixPath(name);return not p.is_absolute() and '..'not in p.parts and str(p)==name
 
+def certify(here):
+    """The packet pins every file it ships; a file with no entry would never be hashed."""
+    rows=js((here/'MANIFEST.json').read_bytes())['files'];listed={r['path']:r for r in rows}
+    need(len(listed)==len(rows),'duplicate packet manifest path')
+    entries=list(here.rglob('*'))
+    need(not any(p.is_symlink()or p.suffix in('.pyc','.pyo')for p in entries),'packet holds a symlink or cached bytecode')
+    shipped={p.relative_to(here).as_posix()for p in entries if p.is_file() and p!=here/'MANIFEST.json'}
+    need(set(listed)==shipped,'packet file set differs from MANIFEST.json')
+    for path,row in listed.items():
+        data=(here/path).read_bytes();need(len(data)==row['bytes']and sha(data)==row['sha256'],'packet member differs from MANIFEST.json: '+path)
+
 def tarbytes(raw,mode='r:*'):
     with tarfile.open(fileobj=io.BytesIO(raw),mode=mode)as t:
         mm=t.getmembers();need(len({m.name for m in mm})==len(mm),'duplicate tar path')
@@ -133,6 +144,7 @@ def rawproof(old,new,original):
 
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--repo',type=Path);args=p.parse_args();here=Path(__file__).resolve().parent
+    certify(here)
     repo=args.repo.resolve()if args.repo else next((q for q in here.parents if(q/'evidence/original/pump/deployed.so').is_file()),None);need(repo is not None,'provide --repo with checked-in original and pinned binary CORE inputs')
     m=js((here/'inputs.json').read_bytes());need(m['historicalControl']==CONTROL and m['historicalCandidate']==CANDIDATE,'manifest source cohort');archive=(here/m['archive']['path']).read_bytes();need(sha(archive)==m['archive']['sha256']and len(archive)==m['archive']['bytes'],'sealed archive')
     packed=tarbytes(archive);need(set(packed)==set(m['archive']['members']),'outer archive domain');data={n:b for n,(b,e)in packed.items()}

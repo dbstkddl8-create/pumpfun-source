@@ -14,6 +14,22 @@ def pinned(path, expected):
     data = path.read_bytes()
     need(len(data) == expected['bytes'] and sha(data) == expected['sha256'], str(path))
     return data
+def admits(packet=HERE):
+    """The packet pins every file it ships; a file with no entry would never be hashed."""
+    def unique(pairs):
+        out = {}
+        for key, value in pairs:
+            need(key not in out, 'duplicate packet manifest path: ' + key)
+            out[key] = value
+        return out
+    listed = json.loads((packet/'MANIFEST.json').read_bytes(), object_pairs_hook=unique)['files']
+    entries = list(packet.rglob('*'))
+    need(not any(p.is_symlink() or p.suffix in ('.pyc', '.pyo') for p in entries),
+         'packet holds a symlink or cached bytecode')
+    shipped = {p.relative_to(packet).as_posix() for p in entries
+               if p.is_file() and p != packet/'MANIFEST.json'}
+    need(set(listed) == shipped, 'packet file set differs from MANIFEST.json')
+    for name, row in listed.items(): pinned(packet/name, row)
 def zip_members(data):
     result = {}
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
@@ -193,6 +209,7 @@ def run(args):
     return {'status':'PASS_BOUNDED_S5_BORROWED_SELECTION_NEGATIVE_REPLAY','source':pins['source'],'parent':pins['parent'],'sourceFiles':263,'COREfiles':279,'stageFiles':264,'officialRows':1035,'raw':347,'normalized':1034,'rawLosses':687,'normalizedLosses':0,'candidateCTObytes':26936,'controlCTObytes':27400,'candidateDirectQueries':113,'controlDirectQueries':len(old_queries),'selectedPointerBeforeFee':True,'selectedTargetStoresStillAfterTagOrFeeSuccess':True,'incomingSharingPayloadDistinct':True,'limits':'Read-only raw-prefix replay and direct FP/register facts, with exact source valid-value/role premises and opaque alias limits. Retained secondary39 receipts inspected, not independently rerun. Frozen D421 diagnostic, not latest-main source qualification or original private ABI inference. No official rescoring, compiler, token similarity metric, VM or source acceptance.'}
 
 def main():
+    admits()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--repo',type=Path,required=True)
     parser.add_argument('--native-zip',type=Path,required=True)

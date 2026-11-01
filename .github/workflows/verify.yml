@@ -452,6 +452,11 @@ jobs:
               python -B scripts/test_pump_dependency_cache_cargo_log.py
               python -B research/tooling-indirect-call-decoding-20261030/test_verify.py
               python -B tests/test_checkpoint_manifest_paths.py
+              python -B tests/test_packet_manifest_census.py
+              python -B tests/test_verifier_module_imports.py
+              python -B tests/test_reconstruction_packet_manifests.py
+              python -B tests/test_borrowed_selection_packet_files.py
+              python -B tests/test_packet_admission_boundaries.py
           - suite: runtime-input-regressions
             commands: |
               python -B scripts/test_admin_token_incentives_verify_encoding.py

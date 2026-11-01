@@ -9,7 +9,7 @@ Exit 0 = every receipt reproduced byte for byte; 1 = anything differs.
 """
 import sys
 sys.dont_write_bytecode = True
-import argparse, gzip, json, pathlib
+import argparse, gzip, hashlib, json, pathlib
 HERE = pathlib.Path(__file__).resolve().parent
 
 

@@ -3,9 +3,11 @@
 
   python3 verify.py --images '{"original": "<deployed.so>", "candidate": "<candidate.so>"}'
 
-1. The image sha256 values must equal the ones recorded in runtime/report.json.gz.
-2. Every file in MANIFEST.json must match its sha256 and size, and every receipt part
-   must match the sha256 recorded in the report.
+1. Every file in MANIFEST.json must match its sha256 and size, before any image
+   is read; the manifest must not name a file twice and no packet member may be
+   a symlink.
+2. The image sha256 values must equal the ones recorded in runtime/report.json.gz,
+   and every receipt part must match the sha256 recorded in the report.
 3. The stored plan (runtime/plan.json.gz: instruction data and account metas per step)
    is replayed on both images in fresh LiteSVM instances. Every receipt field, including
    logs and compute units, must equal the stored receipt.
@@ -40,14 +42,14 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--images', required=True)
     images = json.loads(ap.parse_args().images)
-    report = json.loads(gzip.decompress((HERE / 'runtime/report.json.gz').read_bytes()))
-
-    for name in ('original', 'candidate'):
-        sha = hashlib.sha256(Path(images[name]).read_bytes()).hexdigest()
-        if sha != report['images'][name]:
-            fail(f'{name} image sha256 {sha} != recorded {report["images"][name]}')
 
     manifest = json.loads((HERE / 'MANIFEST.json').read_text())
+    paths = [entry['path'] for entry in manifest['files']]
+    if len(set(paths)) != len(paths):
+        fail('duplicate packet manifest path')
+    entries = list(HERE.rglob('*'))
+    if any(p.is_symlink() or p.suffix in ('.pyc', '.pyo') for p in entries):
+        fail('packet contains a symlink or cached bytecode')
     for entry in manifest['files']:
         data = (HERE / entry['path']).read_bytes()
         if hashlib.sha256(data).hexdigest() != entry['sha256'] or len(data) != entry['bytes']:
@@ -57,6 +59,13 @@ def main():
                and '__pycache__' not in p.parts}
     if listed != present:
         fail(f'manifest file set differs: missing {sorted(present - listed)}, extra {sorted(listed - present)}')
+
+    report = json.loads(gzip.decompress((HERE / 'runtime/report.json.gz').read_bytes()))
+
+    for name in ('original', 'candidate'):
+        sha = hashlib.sha256(Path(images[name]).read_bytes()).hexdigest()
+        if sha != report['images'][name]:
+            fail(f'{name} image sha256 {sha} != recorded {report["images"][name]}')
 
     stored = []
     for part in report['parts']:
