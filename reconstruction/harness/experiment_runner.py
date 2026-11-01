@@ -3,20 +3,28 @@
 import argparse
 import fcntl
 import hashlib
+import importlib.util
 import json
 import os
 import re
 from pathlib import Path
 import shutil
-import signal
 import stat
 import subprocess
 import tempfile
 import time
 import uuid
 
-from process_supervisor import (IMPLEMENTATION_SHA256, SupervisedProcess,
-                                SupervisionError)
+SUPERVISOR_PATH = Path(__file__).resolve().with_name('process_supervisor.py')
+SUPERVISOR_SPEC = importlib.util.spec_from_file_location('_experiment_process_supervisor',
+                                                        SUPERVISOR_PATH)
+if SUPERVISOR_SPEC is None or SUPERVISOR_SPEC.loader is None:
+    raise ImportError(f'cannot load process supervisor from {SUPERVISOR_PATH}')
+SUPERVISOR = importlib.util.module_from_spec(SUPERVISOR_SPEC)
+SUPERVISOR_SPEC.loader.exec_module(SUPERVISOR)
+IMPLEMENTATION_SHA256 = SUPERVISOR.IMPLEMENTATION_SHA256
+SupervisedProcess = SUPERVISOR.SupervisedProcess
+SupervisionError = SUPERVISOR.SupervisionError
 
 # Generated directories are never source, but only the experiment root's
 # target directory is generated build output: nested target directories can
@@ -319,10 +327,10 @@ def validate_attempt_metadata(metadata, name):
             or not valid_attempt_name(name) or not isinstance(inputs, dict)
             or not isinstance(metadata.get('key'), str)
             or digest(json.dumps(inputs, sort_keys=True).encode()) != metadata['key']
-            or state not in ('staging', 'running', 'interrupted', 'completed')
+            or state not in ('staging', 'running', 'interrupted', 'completed', 'published')
             or type(metadata.get('created_ns')) is not int):
         raise ValueError('invalid retained attempt metadata')
-    if state == 'completed' and not isinstance(metadata.get('result'), dict):
+    if state in ('completed', 'published') and not isinstance(metadata.get('result'), dict):
         raise ValueError('completed attempt is missing its result')
     return metadata
 
@@ -362,7 +370,7 @@ def recover_attempts(destination, current_key):
         if metadata['state'] == 'completed':
             completed.append(metadata)
             continue
-        if metadata['state'] == 'interrupted':
+        if metadata['state'] in ('interrupted', 'published'):
             continue
         deadline = time.monotonic() + RECOVERY_PROCESS_WAIT
         while retained_group_active(metadata) and time.monotonic() < deadline:
@@ -434,6 +442,8 @@ def run_trial(source, command, destination, inputs=(), timeout=300):
             previous = metadata['result']
             if retained_result_valid(previous, admission, key, destination):
                 atomic_json(receipt_path, previous)
+                atomic_json(destination / metadata['attempt'] / 'attempt.json',
+                            dict(metadata, state='published', published_ns=time.time_ns()))
                 return dict(previous, reused=True, recovered=True,
                             recovered_attempts=recovered,
                             receipt_history=receipt_history)
@@ -508,6 +518,9 @@ def run_trial(source, command, destination, inputs=(), timeout=300):
                                     completed_ns=time.time_ns(), result=record)
             atomic_json(attempt / 'attempt.json', attempt_metadata)
             atomic_json(receipt_path, record)
+            attempt_metadata = dict(attempt_metadata, state='published',
+                                    published_ns=time.time_ns())
+            atomic_json(attempt / 'attempt.json', attempt_metadata)
             return record
         except BaseException as error:
             try:
