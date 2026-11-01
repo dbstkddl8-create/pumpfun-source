@@ -33,6 +33,8 @@ BASE_SPEC.loader.exec_module(base)
 AMM_IDL_PATH = ROOT / "evidence/upstream/pump_amm.json"
 TRADE_FIXTURE_PATH = ROOT / "research/imported-lab/analysis/pump_fun/amm-v2-trade-fixture.json"
 CANDIDATE_PROVENANCE_PATH = Path(__file__).resolve().parent / "candidate-provenance.json"
+VERIFIER_PATH = Path(__file__).resolve().parent / "verify.py"
+TEST_PATH = Path(__file__).resolve().parent / "test_lifecycle.py"
 AMM_IDL_BYTES = AMM_IDL_PATH.read_bytes()
 AMM_IDL = json.loads(AMM_IDL_BYTES)
 TRADE_FIXTURE_BYTES = TRADE_FIXTURE_PATH.read_bytes()
@@ -74,6 +76,8 @@ PRODUCER_PATHS = (
     AMM_IDL_PATH,
     TRADE_FIXTURE_PATH,
     CANDIDATE_PROVENANCE_PATH,
+    VERIFIER_PATH,
+    TEST_PATH,
 )
 
 STRICT_FIELDS = base.STRICT_FIELDS

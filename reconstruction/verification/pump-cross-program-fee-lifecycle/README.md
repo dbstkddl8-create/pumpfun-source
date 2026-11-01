@@ -87,7 +87,7 @@ equivalence.
 - Captured Pump Main: `7a19affaa2c6187e04a5fe0ea298cee81fa5eb8c24cfcc30d85f615e89f7b02d`
 - Rebuilt Pump Main: `9dfc496c288be94d866cb96652ef4325e194a1cde30665e8414775a2dd2a9890`
 - Captured PumpSwap: `6a7ad34596d83b4c435b32f458a56e718e9f82eb4ad38e4316616d15d24d8ff7`
-- Captured Pump Fees: `40a3755f51cde62c58542767a558f29204d4693555fe2fecac489bca38928c25`
+- Captured Pump Fees: `4f2955d0f6b40cc9ff7daa18ccad7d19119ba1249759f4e7e3bb691beee6b35e`
 - Captured SPL Token: `8190d3f7ceb6cb7a7a8d8924bff89f9f611e15ce1f806f2b6237f3311a98f697`
 - Captured Associated Token: `6804554e69fd3a58caa191dc4a58f4c67223d30ca28ab8987f39fc18d2f7374d`
 
