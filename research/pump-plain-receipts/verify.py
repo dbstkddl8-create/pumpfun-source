@@ -58,6 +58,14 @@ def main():
                 assert report['candidate_sha256'] == report['original_sha256'] == summary['capture_sha256']
                 assert report['cases'] and not report['mismatches']
                 assert len(report['cases']) == comparison['comparison'][script]['case_count']
+                # `mismatches` is the producer's claim about the whole report.
+                # Compare each row's own comparison too, so a row that disagrees
+                # cannot ride on an empty header.
+                for row in report['cases']:
+                    label = row.get('case') or row.get('mutation') or row.get('instruction')
+                    assert row['original'] == row['candidate'], (script, label)
+                    assert not row.get('diff') and not row.get('different_fields'), (script, label)
+                    assert row.get('match', True), (script, label)
                 retained[stage][script] = report
     for script in transition['before']:
         left,right = retained['before'][script],retained['after'][script]
