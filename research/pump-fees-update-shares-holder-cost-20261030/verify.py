@@ -8,7 +8,7 @@ byte for byte after the replay; 1 = any difference.
 """
 import sys
 sys.dont_write_bytecode = True
-import argparse, gzip, json, pathlib
+import argparse, gzip, hashlib, json, pathlib
 
 HERE = pathlib.Path(__file__).resolve().parent
 
