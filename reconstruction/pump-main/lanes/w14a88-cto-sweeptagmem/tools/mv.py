@@ -6,8 +6,13 @@ def span(t,label):
     i=t.index(k)+1; j=t.index('\n\n',i)
     return i,j
 def fnspan(t):
-    i=t.index('@_ZN14pump_recovered9admin_cto7execute17h3bd6d7f34f2e30d7E(')
-    i=t.rindex('\ndefine',0,i)+1; j=t.index('\n}\n',i)
+    """Span of admin_cto::execute's `define` through its closing `}`. The first
+    `@...execute...(` in a module can sit in an earlier caller's body, so a call
+    site must never pick the span: the scans then enumerate and move the
+    caller's blocks and score them as execute's."""
+    m=re.search(r'(?m)^define [^\n]*@_ZN14pump_recovered9admin_cto7execute17h3bd6d7f34f2e30d7E\(',t)
+    if m is None: raise ValueError('no definition of admin_cto::execute')
+    i=m.start(); j=t.index('\n}\n',i)
     return i,j
 def mvend(t,label):
     i,j=span(t,label); blk=t[i:j]; t=t[:i]+t[j+2:]
