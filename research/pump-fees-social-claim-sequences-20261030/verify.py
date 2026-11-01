@@ -2,9 +2,10 @@
 """Independent re-check of this packet: replay every receipt on both images.
 
 usage (inside the packet folder): python3 verify.py --images '{"original": p, "candidate": p}'
-Uses only runtime/receipts.jsonl.gz, runtime/report.json.gz and the two images.
-Exit 0 = every recorded step and final account state reproduces on its own image,
-image sha256 values equal the report, and the report summary is consistent.
+Uses MANIFEST.json, runtime/receipts.jsonl.gz, runtime/report.json.gz and the two images.
+Exit 0 = every packet file matches MANIFEST.json and every recorded step and final account
+state reproduces on its own image, with image sha256 values equal to the report and a
+consistent report summary.
 """
 import argparse, gzip, hashlib, json, pathlib, struct, sys
 from solders.account import Account
@@ -83,6 +84,19 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--images', required=True)
     a = p.parse_args()
+    manifest = json.loads((HERE / 'MANIFEST.json').read_text())
+    listed = {entry['path']: entry for entry in manifest['files']}
+    actual = {str(path.relative_to(HERE)): path for path in HERE.rglob('*')
+              if path.is_file() and path.name not in ('MANIFEST.json', '.DS_Store')
+              and '.git' not in path.parts and '__pycache__' not in path.parts}
+    if set(listed) != set(actual):
+        print('FAIL: packet file set differs from MANIFEST.json: '
+              f'missing={sorted(set(actual) - set(listed))} extra={sorted(set(listed) - set(actual))}')
+        sys.exit(1)
+    for rel, entry in listed.items():
+        data = actual[rel].read_bytes()
+        if len(data) != entry['bytes'] or hashlib.sha256(data).hexdigest() != entry['sha256']:
+            print(f'FAIL: packet member differs from MANIFEST.json: {rel}'); sys.exit(1)
     arg = a.images.strip()
     images = json.loads(arg if arg.startswith('{') else pathlib.Path(arg).read_text())
     report = json.loads(gzip.decompress((HERE / 'runtime/report.json.gz').read_bytes()))
