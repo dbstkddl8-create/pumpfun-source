@@ -109,15 +109,21 @@ if __name__ == '__main__':
     options, remaining = parser.parse_known_args()
     ROOT = options.repo.resolve()
     run = unittest.main(argv=[sys.argv[0], *remaining], exit=False)
+    # Four cases, one of them Windows-only; a renamed, emptied or skipped case
+    # still exits 0 through wasSuccessful(), so the count and the skip set are
+    # checked here.
+    skipped = {case.id().rsplit('.', 1)[-1] for case, _ in run.result.skipped}
+    passed = (run.result.wasSuccessful() and run.result.testsRun == 4
+              and skipped <= {'test_windows_directory_junctions_reject_before_publication'})
     if options.report:
         inputs = [*(f'scripts/{name}' for name in SCRIPTS),
                   'scripts/analyze_program.py', 'scripts/window_elf_reader.py',
                   'evidence/original/mayhem/deployed.so']
         report = {'python': sys.version, 'platform': sys.platform,
-                  'passed': run.result.wasSuccessful(), 'runs': RUNS,
+                  'passed': passed, 'runs': RUNS,
                   'inputs': {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
                              for name in inputs}}
         with options.report.open('x', encoding='utf-8') as stream:
             json.dump(report, stream, indent=2)
             stream.write('\n')
-    sys.exit(not run.result.wasSuccessful())
+    sys.exit(0 if passed else 1)
