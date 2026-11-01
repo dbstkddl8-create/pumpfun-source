@@ -68,6 +68,26 @@ program CPIs. An unsupported initializer is never counted as a passing case.
   the complete 68-file Mayhem source tree, fixture, harness, and verifier;
 - deliberate outcome and account-state negative controls.
 
+The reader binds the complete current input inventory, admitted report mode,
+synthetic fixture classification, and exact plan. It reconstructs every signed
+message, account meta, and required signer from the canonical fixture and the
+declared before-state curve. For an atomic transaction both trade references
+use that transaction's before-state, as they do in the producer. Signature
+claims require actual booleans and the exact signature vector. Every watched
+snapshot key, data length/hash, role, executable metadata, constructor prestate,
+and per-side state link is checked. Input code is loaded directly from admitted
+source bytes, without reading Python bytecode caches. The producer rechecks the
+entire input inventory and both images around execution and publication;
+outputs must be outside the repository.
+
+Regression controls reseal modified receipts and reject an unrelated correctly
+signed compute-only transaction, integer signature flags, omitted inputs,
+invented mode/plan/fixture, missing watched accounts, false role/data metadata,
+disconnected states, and self-consistent false initial states. They also check
+mid-production input/image changes, timestamp-valid injected bytecode, and
+optimized Python. These admission checks are bounded receipt validation, not a
+cryptographic proof that arbitrary supplied observations came from execution.
+
 Each case is classified as `equal_observed_behavior`, `different_behavior`,
 `unsupported_fixture`, or `infrastructure_failure`. Unsupported cases never
 increase the equal count.

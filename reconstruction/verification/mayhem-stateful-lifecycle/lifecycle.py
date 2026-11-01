@@ -14,9 +14,23 @@ from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(ROOT / "scripts"))
+HERE = Path(__file__).resolve().parent
+# Execute the exact source we bind; Python -B still permits reading a .pyc.
+_admission_path = HERE / "admission.py"
+_admission_raw = _admission_path.read_bytes()
+_admission = {"__file__": str(_admission_path), "__name__": "mayhem_admission"}
+exec(compile(_admission_raw, str(_admission_path), "exec", dont_inherit=True), _admission)
+LOADED_INPUT_SHA256 = _admission["snapshot_inputs"]()
+LOADED_INPUT_SHA256[_admission_path.relative_to(ROOT).as_posix()] = hashlib.sha256(_admission_raw).hexdigest()
+if "_ADMITTED_SOURCE_BYTES" in globals():
+    LOADED_INPUT_SHA256[Path(__file__).resolve().relative_to(ROOT).as_posix()] = hashlib.sha256(_ADMITTED_SOURCE_BYTES).hexdigest()
+recheck_inputs = lambda: _admission["recheck_inputs"](LOADED_INPUT_SHA256)
+same_json = _admission["same_json"]
+source_module = _admission["source_module"]
 
-import pump_trade_fixture as pump_fixture  # noqa: E402
+pump_fixture = source_module("mayhem_pump_trade_fixture", ROOT / "scripts/pump_trade_fixture.py")
+LOADED_INPUT_SHA256["scripts/pump_trade_fixture.py"] = hashlib.sha256(pump_fixture._ADMITTED_SOURCE_BYTES).hexdigest()
+recheck_inputs()
 from solders.account import Account  # noqa: E402
 from solders.clock import Clock  # noqa: E402
 from solders.compute_budget import set_compute_unit_limit  # noqa: E402
@@ -27,7 +41,6 @@ from solders.pubkey import Pubkey  # noqa: E402
 from solders.transaction import Transaction  # noqa: E402
 from solders.transaction_metadata import FailedTransactionMetadata  # noqa: E402
 
-HERE = Path(__file__).resolve().parent
 MAYHEM = Pubkey.from_string("MAyhSmzXzV1pTf7LsNkrNwkWKTo4ougAJ1PPg47MD4e")
 PUMP = Pubkey.from_string("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P")
 PUMP_FEES = Pubkey.from_string("pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ")
@@ -87,6 +100,7 @@ class LifecycleVM:
     """One image, one persistent VM, and no account writes after construction."""
 
     def __init__(self, image: Path):
+        recheck_inputs()
         self.image = image.resolve()
         self.spec = json.loads((HERE / "fixture.json").read_text())
         self.vm = LiteSVM().with_sigverify(True).with_blockhash_check(True).with_log_bytes_limit(None)
@@ -95,6 +109,11 @@ class LifecycleVM:
         self._transaction_index = 0
         self._last_blockhash = None
         self.watched = self._watched_keys()
+
+    def account_roles(self):
+        return {"admin_trader": str(ADMIN.pubkey()), "payer": str(PAYER.pubkey()),
+                "intruder": str(INTRUDER.pubkey()), "mayhem_program": str(MAYHEM),
+                **{name: str(value) for name, value in self.keys.__dict__.items()}}
 
     def _load_programs(self) -> None:
         for program, path in (
@@ -306,13 +325,7 @@ class LifecycleVM:
             "signatures": [str(value) for value in tx.signatures],
             "signature_verification": tx.verify_with_results(),
             "recent_blockhash": str(blockhash),
-            "account_roles": {
-                "admin_trader": str(ADMIN.pubkey()),
-                "payer": str(PAYER.pubkey()),
-                "intruder": str(INTRUDER.pubkey()),
-                "mayhem_program": str(MAYHEM),
-                **{name: str(value) for name, value in self.keys.__dict__.items()},
-            },
+            "account_roles": self.account_roles(),
             "error": str(result.err()) if failed else None,
             "before": before,
             "after": after,
@@ -328,11 +341,17 @@ class LifecycleVM:
 
 
 def lifecycle_plan() -> list[dict]:
+    recheck_inputs()
     return json.loads((HERE / "fixture.json").read_text())["lifecycles"]
 
 
 def run_image(image: Path) -> list[dict]:
+    recheck_inputs()
+    image_digest = sha256_bytes(image.read_bytes())
     receipts = []
     for lifecycle in lifecycle_plan():
         receipts.extend(LifecycleVM(image).run_lifecycle(lifecycle))
+    recheck_inputs()
+    if sha256_bytes(image.read_bytes()) != image_digest:
+        raise ValueError("image changed during execution")
     return receipts

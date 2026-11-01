@@ -8,7 +8,23 @@ import json
 import subprocess
 from pathlib import Path
 
-from lifecycle import HERE, ROOT, lifecycle_plan, run_image, sha256_bytes
+if not __debug__:
+    raise SystemExit("Normal Python is required; do not use -O or PYTHONOPTIMIZE.")
+
+HERE = Path(__file__).resolve().parent
+_path = HERE / "admission.py"
+_raw = _path.read_bytes()
+_admission = {"__file__": str(_path), "__name__": "mayhem_admission"}
+exec(compile(_raw, str(_path), "exec", dont_inherit=True), _admission)
+lifecycle = _admission["source_module"]("mayhem_stateful_lifecycle", HERE / "lifecycle.py")
+ROOT, lifecycle_plan, run_image, sha256_bytes = lifecycle.ROOT, lifecycle.lifecycle_plan, lifecycle.run_image, lifecycle.sha256_bytes
+bound_inputs = _admission["bound_inputs"]
+recheck_inputs = lifecycle.recheck_inputs
+outside_repository = _admission["outside_repository"]
+if sha256_bytes(_raw) != lifecycle.LOADED_INPUT_SHA256[_path.relative_to(ROOT).as_posix()]:
+    raise ValueError("admission source changed during import")
+if "_ADMITTED_SOURCE_BYTES" in globals() and sha256_bytes(_ADMITTED_SOURCE_BYTES) != lifecycle.LOADED_INPUT_SHA256[Path(__file__).relative_to(ROOT).as_posix()]:
+    raise ValueError("producer source changed during import")
 
 ORIGINAL = ROOT / "evidence/original/mayhem/deployed.so"
 ORIGINAL_SHA256 = "a87fa9f866272514e6acb852b668c4a08aeb173d56c883039991d114d1199bdb"
@@ -23,38 +39,6 @@ def canonical_line(value: object) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n"
 
 
-def bound_inputs() -> list[Path]:
-    paths = [
-        HERE / "fixture.json",
-        HERE / "provenance.json",
-        HERE / "lifecycle.py",
-        HERE / "producer.py",
-        HERE / "verify.py",
-        ROOT / "scripts/pump_trade_fixture.py",
-        ROOT / "research/imported-lab/analysis/pump_fun/curve-fresh-trades-v3-signed-surfpool.json",
-        ROOT / "reconstruction/mayhem/native-linux-qualification/QUALIFICATION.json",
-        ORIGINAL,
-    ]
-    for group, names in (
-        ("original", ("pump", "pump_fees")),
-        ("dependencies", ("spl_token", "spl_token_2022", "associated_token")),
-    ):
-        for name in names:
-            paths.extend(
-                (
-                    ROOT / f"evidence/{group}/{name}/capture.json",
-                    ROOT / f"evidence/{group}/{name}/deployed.so",
-                )
-            )
-    paths.extend(path for path in sorted((ROOT / "programs/mayhem").rglob("*")) if path.is_file())
-    paths.extend(
-        path
-        for path in sorted(HERE.iterdir())
-        if path.is_file() and path.suffix in {".py", ".json", ".md"}
-    )
-    return list(dict.fromkeys(paths))
-
-
 def source_tree_sha256(paths: list[Path]) -> str:
     digest = hashlib.sha256()
     for path in sorted(paths):
@@ -65,6 +49,8 @@ def source_tree_sha256(paths: list[Path]) -> str:
 
 
 def produce(candidate: Path, output: Path, original_control: bool = False) -> dict:
+    recheck_inputs()
+    outside_repository(output)
     candidate = candidate.resolve()
     if not candidate.is_file():
         raise ValueError(f"candidate is not a regular file: {candidate}")
@@ -77,6 +63,9 @@ def produce(candidate: Path, output: Path, original_control: bool = False) -> di
 
     original_rows = run_image(ORIGINAL)
     candidate_rows = run_image(candidate)
+    recheck_inputs()
+    if sha256_file(candidate) != expected:
+        raise ValueError("candidate image changed during execution")
     if len(original_rows) != len(candidate_rows):
         raise AssertionError("paired execution count differs")
     rows = []
@@ -89,7 +78,7 @@ def produce(candidate: Path, output: Path, original_control: bool = False) -> di
     receipt_path = output / "receipts.jsonl"
     receipt_path.write_text("".join(canonical_line(row) for row in rows), encoding="utf-8", newline="\n")
     input_paths = bound_inputs()
-    inputs = {str(path.relative_to(ROOT)): sha256_file(path) for path in input_paths}
+    inputs = dict(lifecycle.LOADED_INPUT_SHA256)
     mayhem_sources = [path for path in input_paths if path.is_relative_to(ROOT / "programs/mayhem")]
     commit = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=ROOT, check=True, capture_output=True, text=True
@@ -113,6 +102,9 @@ def produce(candidate: Path, output: Path, original_control: bool = False) -> di
     }
     report_path = output / "report.json"
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
+    recheck_inputs()
+    if sha256_file(candidate) != expected:
+        raise ValueError("candidate image changed during publication")
     return report
 
 
