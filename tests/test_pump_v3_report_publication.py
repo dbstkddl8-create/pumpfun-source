@@ -16,6 +16,8 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tests"))
+from published_case_count import assert_case_count
 RUNNERS = (
     "pump_create_control_differential",
     "pump_set_creator_differential",
@@ -135,7 +137,7 @@ class PumpV3ReportPublicationTests(unittest.TestCase):
                 payload = output.read_bytes()
                 report = json.loads(gzip.decompress(payload) if payload[:2] == b"\x1f\x8b" else payload)
                 self.assertEqual(report["mismatches"], [])
-                self.assertGreater(report.get("case_count", len(report["cases"])), 0)
+                assert_case_count(self, report)
                 self.assertEqual([p.name for p in output.parent.iterdir()], [output.name])
 
 
