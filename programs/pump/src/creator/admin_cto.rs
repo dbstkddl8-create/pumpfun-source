@@ -309,7 +309,7 @@ fn validate(st:&CtoState,hopt:Option<bool>,fee:Option<u64>,new:Option<Pubkey>,ho
 
 
 
-  if unsafe{expect_p((pt8(4,(t==*sharing) as u8)&1)!=0,true,0.625)}/*shim: 312 t==sharing memcmp equal-likely 20:12 (llc spill colour; was the libcall 12:20); passthrough on the compare byte*/||t==*holder_key{return Err(error!(PumpError::InvalidCreator));}t};
+  if unsafe{expect_p((pt8(4,(t==*sharing) as u8)&1)!=0,true,0.625)}/*shim: 312 t==sharing memcmp equal-likely 20:12 (llc spill colour; was the libcall 12:20); passthrough on the compare byte*/||t==*holder_key{unsafe{lte(32,&t as *const Pubkey as *mut u8)}/*shim: lifetime end of t at the 312 InvalidCreator error (t is dead there; recolours that block's error temps)*/;return Err(error!(PumpError::InvalidCreator));}t};
 // layout-pad(13): aligns the next Source site with the original line
  let cashback=if holder{false}else{st.cashback};
 
