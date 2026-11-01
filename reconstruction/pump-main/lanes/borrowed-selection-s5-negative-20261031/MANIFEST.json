@@ -26,8 +26,8 @@
       "sha256": "f338f612042b442c38ac553b7e4782189e3e122db3695d6b72bf79da88fef479"
     },
     "verify.py": {
-      "bytes": 18144,
-      "sha256": "54a6edda2f3456204198a2525ac02a5109a4259ea883fa9fe05b7e44a94bbba1"
+      "bytes": 18583,
+      "sha256": "7a5ed6c3882501e1c42904234061d63c2138b7c1e2d6b60639fc94f10ef43fb1"
     }
   },
   "role": "Bounded actual raw-prefix evidence and rejected source counterexample; no program-source promotion or progress-table change."

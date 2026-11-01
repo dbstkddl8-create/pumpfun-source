@@ -47,8 +47,9 @@ def main():
     paths = [entry['path'] for entry in manifest['files']]
     if len(set(paths)) != len(paths):
         fail('duplicate packet manifest path')
-    if any(p.is_symlink() for p in HERE.rglob('*')):
-        fail('packet contains a symlink')
+    entries = list(HERE.rglob('*'))
+    if any(p.is_symlink() or p.suffix in ('.pyc', '.pyo') for p in entries):
+        fail('packet contains a symlink or cached bytecode')
     for entry in manifest['files']:
         data = (HERE / entry['path']).read_bytes()
         if hashlib.sha256(data).hexdigest() != entry['sha256'] or len(data) != entry['bytes']:

@@ -16,6 +16,30 @@ from types import SimpleNamespace
 import zipfile
 
 sys.dont_write_bytecode = True
+def certify_packet(packet):
+    """Admit packet bytes before importing its executable qualification helper."""
+    def unique(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError('duplicate packet manifest path: ' + key)
+            result[key] = value
+        return result
+    rows = json.loads((packet / 'MANIFEST.json').read_bytes(), object_pairs_hook=unique)['files']
+    entries = list(packet.rglob('*'))
+    if any(p.is_symlink() or p.suffix in ('.pyc', '.pyo') for p in entries):
+        raise ValueError('packet holds a symlink or cached bytecode')
+    shipped = {p.relative_to(packet).as_posix() for p in entries
+               if p.is_file() and p != packet / 'MANIFEST.json'}
+    if set(rows) != shipped:
+        raise ValueError('packet file set differs from MANIFEST.json')
+    for name, expected in rows.items():
+        data = (packet / name).read_bytes()
+        if len(data) != expected['bytes'] or hashlib.sha256(data).hexdigest() != expected['sha256']:
+            raise ValueError('packet member differs from MANIFEST.json: ' + name)
+
+
+certify_packet(Path(__file__).resolve().parent)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import qualification as q
 
@@ -37,19 +61,6 @@ def safe_name(name):
     return p
 
 
-def certify_packet(packet):
-    """The packet pins every file it ships; a file with no entry would never be hashed."""
-    rows = q.read_json(packet / 'MANIFEST.json')['files']
-    entries = list(packet.rglob('*'))
-    q.need(not any(p.is_symlink() or p.suffix in ('.pyc', '.pyo') for p in entries),
-           'packet holds a symlink or cached bytecode')
-    shipped = {p.relative_to(packet).as_posix() for p in entries
-               if p.is_file() and p != packet / 'MANIFEST.json'}
-    q.need(set(rows) == shipped, 'packet file set differs from MANIFEST.json')
-    for name, expected in rows.items():
-        data = (packet / name).read_bytes()
-        q.need(len(data) == expected['bytes'] and q.sha(data) == expected['sha256'],
-               'packet member differs from MANIFEST.json: ' + name)
 
 
 class GitProof:
