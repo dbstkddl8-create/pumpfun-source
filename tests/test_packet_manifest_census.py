@@ -192,6 +192,42 @@ class PacketManifestCensus(unittest.TestCase):
                 self.assertIn('symlink' if mode == 'symlink' else 'duplicate packet manifest path',
                               result.stdout + result.stderr)
 
+    def test_all_three_decode_packet_admissions_preserve_pristine_and_reject_tampering(self):
+        names = ('pump-instruction-decode-boundaries-20261030',
+                 'pump-fees-instruction-decode-boundaries-20261030',
+                 'pump-amm-instruction-decode-boundaries-20261030')
+        marks = {'changed': ('packet member differs', 'manifest mismatch'),
+                 'extra': ('packet file set differs', 'manifest file set differs', 'unlisted files'),
+                 'symlink': ('symlink',),
+                 'duplicate': ('duplicate packet manifest path',)}
+        for name in names:
+            for mode in ('pristine', 'changed', 'extra', 'symlink', 'duplicate'):
+                with self.subTest(packet=name, mode=mode), tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    packet = root / 'packet'
+                    shutil.copytree(RESEARCH / name, packet)
+                    if mode == 'changed': (packet / 'README.md').write_bytes(b'changed')
+                    elif mode == 'extra': (packet / 'runtime/unlisted.bin').write_bytes(b'extra')
+                    elif mode == 'symlink':
+                        member = packet / 'README.md'
+                        member.replace(root / 'README.md')
+                        member.symlink_to(root / 'README.md')
+                    elif mode == 'duplicate':
+                        path = packet / 'MANIFEST.json'
+                        manifest = json.loads(path.read_text())
+                        manifest['files'].append(dict(manifest['files'][0]))
+                        path.write_text(json.dumps(manifest))
+                    result = run(packet)
+                    text = result.stdout + result.stderr
+                    if mode == 'pristine':
+                        self.assertIn('/nonexistent/', text)
+                        self.assertTrue(all(mark not in text for group in marks.values()
+                                            for mark in group), text)
+                    else:
+                        self.assertNotEqual(result.returncode, 0)
+                        self.assertNotIn('/nonexistent/', text)
+                        self.assertTrue(any(mark in text for mark in marks[mode]), text)
+
 
 if __name__ == '__main__':
     unittest.main()
