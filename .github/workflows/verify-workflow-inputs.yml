@@ -23,7 +23,9 @@ jobs:
           import unittest
           suite = unittest.defaultTestLoader.discover('scripts', pattern='test_workflow_*.py')
           result = unittest.TextTestRunner(verbosity=2).run(suite)
-          sys.exit(0 if result.wasSuccessful() and result.testsRun == 47 and not result.skipped else 1)
+          expected = 51
+          print(f'Expected {expected} tests; ran {result.testsRun}; skipped {len(result.skipped)}', file=sys.stderr)
+          sys.exit(0 if result.wasSuccessful() and result.testsRun == expected and not result.skipped else 1)
           PYTEST
       - name: Check for newly missing script inputs
         env:

@@ -51,8 +51,8 @@ class BooleanWorkflowMatrixTests(unittest.TestCase):
         self.workflow('[true, false]')
         for flag in ('True', 'False'):
             self.write('scripts/flag-' + flag + '.py', 'pass\n')
-        if (self.root / 'scripts/flag-true.py').exists():
-            self.skipTest('requires a case-sensitive filesystem for missing-path control')
+        # Git inventory names retain exact case even on a case-folding worktree.
+        # The checker compares those names, matching the paths GitHub checks out.
         status, report = self.run_check()
         self.assertEqual(status, 1)
         self.assertEqual({row[2] for row in report['new_missing']},
