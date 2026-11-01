@@ -556,6 +556,8 @@ def main():
     def cfg(label, idx):
         return x(label, idx)["cfg"]
 
+    roundtrip_before = cfg_fields(grouped[("T-all-roundtrip", "original")][0]["before"].get(CONFIG))
+
     # A: 5-hop anchors.
     check(tail("A-buy5", 0) == 5207955235891
           and x("A-buy5", 0)["deltas"].get("bb22") == 4515471
@@ -580,9 +582,9 @@ def main():
           and "Custom(3010)" in err("T-unsigned", "original", 0)
           and all({k: v for k, v in cfg("T-all-roundtrip", i).items()
                    if k not in ("mayhem", "cashback", "boost_enabled")}
-                  == {k: v for k, v in cfg("T-all-roundtrip", 0).items()
+                  == {k: v for k, v in roundtrip_before.items()
                       if k not in ("mayhem", "cashback", "boost_enabled")}
-                  for i in range(1, 6))
+                  for i in range(6))
           and cfg("T-all-roundtrip", 5)["mayhem"] == 1
           and cfg("T-all-roundtrip", 5)["cashback"] == 1
           and cfg("T-all-roundtrip", 5)["boost_enabled"] == 1
