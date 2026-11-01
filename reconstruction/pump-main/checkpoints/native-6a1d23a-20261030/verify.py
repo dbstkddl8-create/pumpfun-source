@@ -15,6 +15,7 @@ import tempfile
 from types import SimpleNamespace
 import zipfile
 
+sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import qualification as q
 
@@ -34,6 +35,21 @@ def safe_name(name):
     q.need(bool(name) and not p.is_absolute() and '\\' not in name
            and all(v not in ('', '.', '..') for v in name.split('/')), 'unsafe archive path')
     return p
+
+
+def certify_packet(packet):
+    """The packet pins every file it ships; a file with no entry would never be hashed."""
+    rows = q.read_json(packet / 'MANIFEST.json')['files']
+    entries = list(packet.rglob('*'))
+    q.need(not any(p.is_symlink() or p.suffix in ('.pyc', '.pyo') for p in entries),
+           'packet holds a symlink or cached bytecode')
+    shipped = {p.relative_to(packet).as_posix() for p in entries
+               if p.is_file() and p != packet / 'MANIFEST.json'}
+    q.need(set(rows) == shipped, 'packet file set differs from MANIFEST.json')
+    for name, expected in rows.items():
+        data = (packet / name).read_bytes()
+        q.need(len(data) == expected['bytes'] and q.sha(data) == expected['sha256'],
+               'packet member differs from MANIFEST.json: ' + name)
 
 
 class GitProof:
@@ -159,6 +175,7 @@ def sdk_check(root, inventory):
 
 
 def execute(packet, original, args):
+    certify_packet(packet)
     metadata = q.read_json(packet / 'CHECKPOINT.json')
     q.need(metadata['sourceCommit'] == BASE and metadata['controllerCommit'] == CONTROLLER,
            'checkpoint commit differs')

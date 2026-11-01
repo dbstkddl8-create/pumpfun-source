@@ -34,6 +34,21 @@ def checked_file(path, expected):
     return data
 
 
+def certify_packet():
+    """The packet pins every file it ships; a file with no entry would never be hashed."""
+    rows = json.loads((HERE / 'MANIFEST.json').read_text())['files']
+    entries = list(HERE.rglob('*'))
+    require(not any(p.is_symlink() or p.suffix in ('.pyc', '.pyo') for p in entries),
+            'packet holds a symlink or cached bytecode')
+    shipped = {p.relative_to(HERE).as_posix() for p in entries
+               if p.is_file() and p != HERE / 'MANIFEST.json'}
+    require(set(rows) == shipped, 'packet file set differs from MANIFEST.json')
+    for name, expected in rows.items():
+        data = (HERE / name).read_bytes()
+        require(len(data) == expected['bytes'] and digest(data) == expected['sha256'],
+                'packet member differs from MANIFEST.json: ' + name)
+
+
 class ELF:
     def __init__(self, data):
         self.data = data
@@ -218,6 +233,7 @@ def compare_witness(rows, values):
 
 
 def run(repo):
+    certify_packet()
     spec_bytes = (HERE / 'queries.json').read_bytes()
     input_bytes = (HERE / 'inputs.json').read_bytes()
     require(digest(spec_bytes) == SPEC_SHA256 and digest(input_bytes) == INPUTS_SHA256, 'fixed packet spec/input commitment')
