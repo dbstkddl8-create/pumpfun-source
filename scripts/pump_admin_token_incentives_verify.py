@@ -86,7 +86,9 @@ def main(receipt_path=diff.OUTPUT, candidate_path=diff.CANDIDATE,
         check(regression["multi_hop_curve"]["receipt_sha256"] == diff.sha(curve_file), "curve regression receipt hash differs")
         # The header alone says what the retained rows must say; a receipt whose
         # rows disagree with it is refused rather than published as clean.
-        check(isinstance(quote.get("results"), list) and len(quote["results"]) == quote["cases"] == 507
+        check(type(quote.get("cases")) is int and type(quote.get("mismatches")) is int
+              and isinstance(quote.get("results"), list) and all(isinstance(row, dict) for row in quote["results"])
+              and len(quote["results"]) == quote["cases"] == 507
               and quote["mismatches"] == 0
               and not any(row.get("matches") is not True for row in quote["results"]),
               "quote regression cases/mismatches differ")
@@ -94,7 +96,9 @@ def main(receipt_path=diff.OUTPUT, candidate_path=diff.CANDIDATE,
               "quote regression binds no input")
         check(all(checksum == diff.sha(diff.ROOT / path)
                    for path, checksum in quote["bound_inputs_sha256"].items()), "quote bound input hash differs")
-        check(isinstance(curve.get("cases"), list) and len(curve["cases"]) == curve["case_count"] == curve["passed"] == 56
+        check(type(curve.get("case_count")) is int and type(curve.get("passed")) is int
+              and isinstance(curve.get("cases"), list) and all(isinstance(row, dict) for row in curve["cases"])
+              and len(curve["cases"]) == curve["case_count"] == curve["passed"] == 56
               and not any(row.get("mismatches") != [] for row in curve["cases"]),
               "curve regression case count differs")
         check(curve["candidate_sha256"] == receipt["candidate_sha256"], "curve regression candidate hash differs")
