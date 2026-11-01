@@ -114,6 +114,11 @@ class ExperimentRecoveryTests(unittest.TestCase):
 
     def test_completed_attempt_is_republished_without_rerun(self):
         first = E.run_trial(self.source, self.pass_command, self.destination)
+        attempt_path = self.destination / first['attempt'] / 'attempt.json'
+        metadata = json.loads(attempt_path.read_text())
+        metadata['state'] = 'completed'
+        metadata.pop('published_ns')
+        E.atomic_json(attempt_path, metadata)
         (self.destination / 'latest.json').unlink()
         second = E.run_trial(self.source, self.pass_command, self.destination)
         self.assertTrue(second['reused'])

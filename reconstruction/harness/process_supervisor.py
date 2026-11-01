@@ -12,6 +12,7 @@ import select
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 
 
@@ -19,7 +20,8 @@ SCHEMA = 'process-supervisor-v1'
 STARTUP_TIMEOUT = 10.0
 TERMINATION_GRACE = .5
 TERMINATION_TIMEOUT = 2.0
-IMPLEMENTATION_SHA256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+IMPLEMENTATION_BYTES = Path(__file__).read_bytes()
+IMPLEMENTATION_SHA256 = hashlib.sha256(IMPLEMENTATION_BYTES).hexdigest()
 
 
 class SupervisionError(RuntimeError):
@@ -95,9 +97,14 @@ class SupervisedProcess:
         config_read, config_write = os.pipe()
         status_read, status_write = os.pipe()
         guardian = None
+        guardian_source = None
         try:
+            descriptor, guardian_source = tempfile.mkstemp(prefix='.process-supervisor-',
+                                                           suffix='.py', dir=cwd)
+            with os.fdopen(descriptor, 'wb') as stream:
+                stream.write(IMPLEMENTATION_BYTES); stream.flush(); os.fsync(stream.fileno())
             guardian = subprocess.Popen(
-                [sys.executable, '-I', '-S', str(Path(__file__).resolve()),
+                [sys.executable, '-I', '-S', guardian_source,
                  '--guardian', str(control_read), str(config_read), str(status_write)],
                 pass_fds=(control_read, config_read, status_write),
                 stdin=None, stdout=stdout, stderr=stderr, start_new_session=True,
@@ -125,6 +132,7 @@ class SupervisedProcess:
                     or type(trial_pid) is not int or trial_pid <= 0
                     or os.getpgid(guardian.pid) != group):
                 raise SupervisionError('guardian process-group ownership check failed')
+            os.unlink(guardian_source); guardian_source = None
             return cls(guardian, control_write, status_read, remainder, command,
                        group, trial_pid)
         except BaseException:
@@ -132,6 +140,11 @@ class SupervisedProcess:
                 _terminate_owned_group(guardian, guardian.pid, None)
             raise
         finally:
+            if guardian_source is not None:
+                try:
+                    os.unlink(guardian_source)
+                except FileNotFoundError:
+                    pass
             for descriptor in (control_read, config_read, config_write, status_write):
                 if descriptor >= 0:
                     os.close(descriptor)
