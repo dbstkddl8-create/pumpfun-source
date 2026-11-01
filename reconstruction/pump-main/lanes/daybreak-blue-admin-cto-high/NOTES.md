@@ -48,6 +48,17 @@ This is lower than the `0.68424` merged-composition number in #4018 because
 the checked-in source also contains #4017's placeholder removal and
 `collection_native == false` spelling.
 
+While this lane was being verified, upstream independently merged the same
+composition repair as #4019.  The branch was rebased onto final source base
+`ac37d74157c29d749a6c3f8510e8cd6408155bd0`, and the now-redundant local
+composition commit was dropped.  A new cold baseline build of #4019 reproduced
+unstripped SHA-256
+`a950162cc7d5201c053b7a7979871132b4402989e8640bd3a631ba68a34c2482`
+and similarity `0.68424`.  A new cold candidate build reproduced
+`4470f55f03fa6a65a95833c68b8cca36a1c45f7538123c309b3fef30c1026767`
+and similarity `0.68454`.  Therefore the final branch differs from current
+upstream in only the qualified `CtoState` order plus its tests and evidence.
+
 ## Qualified source changes
 
 ### 1. Repair the W17 composition
