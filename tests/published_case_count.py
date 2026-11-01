@@ -12,6 +12,7 @@ subprocess tests the same check.
 def assert_case_count(case, report):
     """Require a declared integer case count equal to the published case list."""
     case.assertIn('case_count', report)
+    case.assertIs(type(report['cases']), list)
     case.assertIs(type(report['case_count']), int)
     case.assertGreater(report['case_count'], 0)
     case.assertEqual(report['case_count'], len(report['cases']))

@@ -33,6 +33,10 @@ class PublishedCaseCountTests(unittest.TestCase):
             with self.subTest(count=count), self.assertRaises(AssertionError):
                 self.check({'case_count': count, 'cases': [{}, {}]})
 
+    def test_case_collection_must_be_a_list(self):
+        with self.assertRaises(AssertionError):
+            self.check({'case_count': 2, 'cases': {'a': {}, 'b': {}}})
+
     def test_empty_case_list_is_refused(self):
         with self.assertRaises(AssertionError):
             self.check({'case_count': 0, 'cases': []})
