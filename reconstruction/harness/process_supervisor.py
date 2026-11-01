@@ -219,11 +219,40 @@ def _read_event(descriptor, initial, timeout):
     return event, remainder
 
 
+def _known_group_owner_alive(guardian, process_group, trial_pid):
+    if guardian.poll() is not None:
+        try:
+            return trial_pid is not None and os.getpgid(trial_pid) == process_group
+        except ProcessLookupError:
+            return False
+    try:
+        return os.getpgid(guardian.pid) == process_group == guardian.pid
+    except ProcessLookupError:
+        return False
+
+
+def _signal_owned_group(guardian, process_group, trial_pid, sig):
+    try:
+        os.killpg(process_group, sig)
+    except ProcessLookupError:
+        return False
+    except PermissionError as error:
+        # macOS can report EPERM rather than ESRCH after the group disappeared
+        # between wait/poll and killpg. Ignore it only after both PIDs received
+        # from the owned guardian are independently gone.
+        if _known_group_owner_alive(guardian, process_group, trial_pid):
+            raise SupervisionError('permission denied signaling an owned process group') from error
+        return False
+    return True
+
+
 def _terminate_owned_group(guardian, process_group, trial_pid):
     """Bound cleanup to a group whose original guardian or trial still owns it."""
     if guardian.poll() is not None:
+        if trial_pid is None:
+            return
         try:
-            owned = trial_pid is not None and os.getpgid(trial_pid) == process_group
+            owned = os.getpgid(trial_pid) == process_group
         except ProcessLookupError:
             return
     else:
@@ -233,18 +262,13 @@ def _terminate_owned_group(guardian, process_group, trial_pid):
             return
     if not owned:
         raise SupervisionError('refusing to signal a process group without ownership')
-    try:
-        os.killpg(process_group, signal.SIGTERM)
-    except ProcessLookupError:
+    if not _signal_owned_group(guardian, process_group, trial_pid, signal.SIGTERM):
         return
     try:
         guardian.wait(timeout=TERMINATION_GRACE)
     except subprocess.TimeoutExpired:
         pass
-    try:
-        os.killpg(process_group, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
+    _signal_owned_group(guardian, process_group, trial_pid, signal.SIGKILL)
     try:
         guardian.wait(timeout=TERMINATION_TIMEOUT)
     except subprocess.TimeoutExpired as error:
