@@ -97,3 +97,36 @@ load relative to the other memory operations in its block. The original's accoun
 run (34 slot accesses against our 24) are RA splits of one long interval; no addressable memory holds that pointer, so
 `read_volatile` cannot reproduce a spill-slot reload (it would read `ctx.accounts` and cost a second load), and a local
 copy read through `read_volatile` becomes an alloca that shifts the whole frame by 8 B.
+
+## Maintainer qualification after #3934 (2026-10-31)
+
+The reviewed composition preserves #3965 ancestry and adds two compile-time
+size/alignment checks for the concrete `Program<LegacyFeesProgram>` wrapper.
+Its temporary lamports handle now uses `Rc::into_raw`,
+`Rc::increment_strong_count`, then `Rc::from_raw`, so the increment receives
+the documented raw-pointer provenance and exactly one added owner is dropped
+with the constructed `AccountInfo`. The pinned Anchor 0.31.1 `Program` source
+has only `info: &AccountInfo` plus `PhantomData`; its private field shape and
+the compile checks establish the reference offset for this build. This is
+not a stable Anchor ABI guarantee. The live original Rc and non-unwinding
+read/increment interval remain required; overflow follows pinned std abort.
+
+An independent fresh main #3934 build and repaired source build measured
+2258 → 2259 matching CTO tokens (0.67645 → 0.67675), 27,400 bytes, 3,141
+slot differences, 154 internal calls and three syscalls unchanged. All 1,034
+raw/normalized exact windows remain matched, with no losses. Both repaired
+images equal the unmodified #3965 composition images. Only 114 text bytes
+inside CTO change versus #3934; the unstripped symbol table also changes
+four local basic-block addresses.
+
+Fresh captured-program comparisons pass 388 cases with zero mismatches and
+776 nonempty valid signed transaction vectors. The persistent lifecycle
+passes nine cases, 20 unique transactions per image, 78 individual signature
+checks and exact deterministic replay, including state continuity/rollback
+and genuine signed dependency CPIs. These finite fixtures do not establish
+whole-program equivalence. Earlier IR screens above remain historical
+research; stopped claim-token-incentive campaigns remain excluded.
+
+Repaired source snapshot: `31ddc1e89d22ebde38a90c7397371d63e1f691041c5197e65f3e8d7ab4e17b10`.
+Unstripped image: `c1cc9abba1ca4add9ed7be71e3de68e12a0ed4e9cf1916428b55c524c47f7772`.
+Stripped image: `57ffa6f2dd94ff75b675f75aea2d23bb4b3a998896b635b7920c3e2566d1f0c9`.
