@@ -5,13 +5,124 @@ Base: main 599891304 (admin_cto.rs as on 1f4e396b5: A6 + ev6): 0.67436, M 2,251,
 raw-IR capture `m0` reproduces it, `eq_main: true`). Successor of w16a02-cto-faithknobs (#3858) and w16a05-cto-skelsplice
 (#3869). Ledger approach `stitch16`, keys `0x22a10-w16-5998913-stitch16-<name>-v1`.
 
-**Result: notes only, no landing.** No composite of the cached library reaches M 2,252 at 27,400 B, and no tie at M 2,251
+**Result (wave 17): one slots tie-break composite, sh_iflet+rP_back (W17-5); wave 16: notes only.** No composite of the cached library reaches M 2,252 at 27,400 B, and no tie at M 2,251
 has fewer positional slots than main (land.py ranks admin_cto by ratio, then slots). The library is now one catalog on the
 current main; the splice oracle reproduces every new-main recapture and every built composite tested here byte for byte
 (one size miss, explained below). Every lead that is above main alone (g1 +2, crl3/crl2 +1, crl3+g1+t1n +1) sits 16-120 B
 over the pin, and the cheapest library repay at each of those sizes costs more than the lead gains.
 
 M is the masked difflib match count of measure.sh: ratio = 2M / (6676 + (bytes - 27400)/8), so +1 M = +0.0003.
+
+## Wave 17 continuation (2026-11-01 03:38-06:38 UTC; main 1647da0 -> 6d498c5 (#3936 v4320) during the lane)
+
+Recovered the dead w16 state (committed the uncommitted CtoState/fl1 notes, merged main), harvested once more, and added
+the shim-era integrator map below. Ledger keys `0x22a10-w16-1647da0-stitch16-<name>-v1` and
+`0x22a10-w16-6d498c5-stitch16-<name>-v1` (written by `tools/scr.py`).
+
+### W17-1. Harvest round 4 (`data/cat16_r4.json` in `$OUT`; catalog now walks w17 lanes and treats 1647da0 as new)
+
+- 2,390 rows, 980 usable; 54 new since round 3 (w16a19-24 S3 forms, w16a14 `lv_hu*`, w16a20 `F*`/`H*`, w17 shims).
+- No new source capture reaches M 2,200; the only new row above main is the RA-forced oracle `Fdecp2__ra` (2,293, not
+  source). pairsnew: 0 combos with M >= 2,200. Leads (`scr16.py lead`): g1t1n best 2,247, crl3 2,241, C3b 2,239,
+  crl3t1n none, sh_iflet 2,250 (1,760 priced). The index gained 55 builds (`idxM_new_r4.npz`).
+
+### W17-2. Skeleton map for the shim track (`tools/regm.py`, `tools/skel.py`; `data/skel_r4_top60.json`)
+
+Exact M (scorer mask) and rfj (registers, frame offsets and jump offsets masked; same difflib) per original region
+(E entry 0-0x3a8, V validate 0x3a8-0x1a88, SH sweep head, TC TCF 0x26b8-0x3c40, SC sharing CPI 0x3c40-0x4a28, PC ...),
+for the 137 best or front-family captures of the catalog. Main: M 2,251, rfj 2,785. A shim can repair naming (registers,
+frame) more easily than skeleton, so the best shim bases are the ones with the best skeleton at the pinned size.
+
+| capture | genes | bytes | M | rfj (vs main) | E / V / TC / SC: dM / drfj |
+| --- | --- | ---: | ---: | ---: | --- |
+| B_fru1 (w16a14) | VCsh+fru1 | 27,224 | 2,139 | 2,889 (+104) | E +0/+0, V +25/+55, TC -120/-4, SC -15/+64 |
+| A_fru5 (w16a14) | VCsh+t1n+fru5 | 27,400 | 2,200 | 2,867 (+82) | E -2/+0, V +12/+52, TC -11/+0, SC -21/+33 |
+| fl1hk (w16) | fl1+hkl3 | 27,312 | 2,111 | 2,862 (+77) | E -1/+16, V +4/+9, TC -52/-3, SC -56/+62 |
+| pdf (new) | m_pdaf (holder PDA before the shared test) | 27,440 | 1,936 | 2,858 (+73) | E +11/+34, V +3/+5, TC -255/-17, SC -35/+54 |
+| Lv_evcb (w16a16) | Lv+evcb | 27,400 | 2,204 | 2,849 (+64) | E +0/-1, V +8/+8, TC -9/+0, SC -23/+65 |
+| fl4 (new) | flags bound early, original order | 27,352 | 2,115 | 2,849 (+64) | E +0/+4, V +9/+7, TC -56/-3, SC -57/+62 |
+| L2_lfau_ORLKWSED (w15a03) | sh_iflet+lfau_ORLKWSED | 27,392 | 2,206 | 2,843 (+58) | SC -39/+58 only |
+| A_tf_g1a (w16a14) | VCsh+t1n+tf_g1a | 27,408 | 2,206 | 2,841 (+56) | V +6/+59 |
+| Lsh_t1u (w16a05) | VCsh+t1u | 27,352 | 2,215 | 2,829 (+44) | V +11/+47 |
+| fru5 (w15a16) | pool_authority clone `..*x` after data | 27,400 | 2,234 | 2,818 (+33) | SC -17/+33 only |
+| ntA (w16) | hkl3+lfb5 | 27,400 | 2,251 | 2,802 (+17) | E +0/+9, SC +0/+8 |
+| C3b / g1t1n (w16) | crl3+g1+t1n / g1+t1n | 27,488 / 27,416 | 2,252 / 2,251 | 2,796 (+11) | V -3/+11, SC +6/+0 |
+
+Per-region best skeleton gain over main: **E +37** (PDA-first `m_pdaf`, +34 alone), **V +59** (VC validate closure,
+w16a14 `A_tf_g1a`; +52..+55 in A_fru5/B_fru1), **SC +65** (w16a16 `Lv_evcb`; +54..+64 in pdf, fl1/fl4, L2_lfau, B_fru1),
+SH +7, TC +6, PC +4, everything else 0. These gains are region-additive (B_fru1 = V+55 and SC+64), so the skeleton
+envelope is about rfj 2,960 (+178). Every base that carries them loses exact M to naming: SC's original block order costs
+17-57 exact in every variant (main's SC naming is tuned to main's SC order), TC collapses under the PDA-first entry
+(-255) and VC's V gain shows only +6..+25 exact.
+
+- `fru5` (w15a16; pool_authority clone `..*x` after data) is the cleanest single-region base: identical to main except SC,
+  where it is rfj +33 and exact -17. `A_fru5` (VCsh+t1n+fru5) is the best skeleton at exactly 27,400 B (+82, M 2,200).
+- In SC the naming loss of fru5/Lv_evcb is spread over many register pairs and frame shifts (-24/-32/-8), not one rename.
+
+### W17-3. The original's early flag loads (fl4/fl5/fl6) and PDA-first (`m_pdaf`) on the current source
+
+The original loads the three curve flags right after the shared test, before the quote-mint copy (orig 0x290-0x2b0):
+`is_cashback_coin` (+0xa3) -> spill -0x8e8, `is_holder_reward` (+0xa5) -> spill -0x8e0, `is_mayhem_mode` (+0xa2) -> r8.
+
+| name | spelling | bytes | M | rfj | note |
+| --- | --- | ---: | ---: | ---: | --- |
+| fl1/fl3 (w16) | mayhem, holder, cashback bound before quote_locked | 27,352 | 2,115 | 2,848 | |
+| fl4 | cashback, holder, mayhem (the original's order) | 27,352 | 2,115 | 2,849 | not byte-identical to fl1; RA puts cashback in r8, spills mayhem (-0x8f8) and holder (-0x8e8) |
+| fl6 | holder, cashback, mayhem | 27,352 | 2,115 | 2,848 | |
+| fl5 | cashback, holder bound early, mayhem at the literal | 27,200 | 2,071 | 2,832 | |
+| pdf | `m_pdaf` alone (holder PDA before the shared test, the original's call order) | 27,440 | 1,936 | 2,858 | E +11/+34, TC -255 |
+| fl4p / fl1p | fl4 / fl1 + `m_pdaf` (the original's whole entry order) | 27,488 | 1,564 | 2,209 | placement collapse (TC/PC unaligned) |
+
+fl4's exact loss is naming only (rfj +64): in TC the AccountInfo clone byte-field spills (`ldxb; stxdw [r10-..]`, orig
+0x2888-0x2af0) use r7 where the original and main use r5 (29 tokens), and SC/SH lose the same way. fl4 keeps 48 B of
+room. It is a base for a register shim, not for an ordinary-source repay.
+
+### W17-4. Shim knobs x size leads (`w17/base_rc` = main 6d498c5 + w17a04 rc1964 #3950)
+
+w17a03's volatile-load screen (#3936 landed v4320, +1) found two free size knobs: a volatile CtoState flag load,
+`L2735` (cashback) or `L2737` (holder_enabled), is -16 B at 0 M (2,251 at 27,384 B on 5998913; 2,252 on top of v4320).
+Splice prices on 5998913 (`splice.py`): v4320 is additive with every size lead (g1 2,254 @27,520, crl3 / C3b 2,253 @27,472 /
+27,488, crl3+t1n 2,252 @27,448, g1+t1n 2,252 @27,416), and v4320+L2735 is 2,252 @27,384. L2735 overlaps the g1-family
+hunks, so those composites were built:
+
+| name | genes (on main 442ae70 = 6d498c5 + rc1964) | bytes | M | vs main 2,257 |
+| --- | --- | ---: | ---: | --- |
+| rc0 | - (main + #3950 before it landed) | 27,400 | 2,257 | reproduces #3950 (0.67615) |
+| rcG | g1 + t1n | 27,416 | 2,257 | 0 (as on 5998913) |
+| rcC3 / rcC3b | crl3 / crl3 + g1 + t1n | 27,472 / 27,488 | 2,258 / 2,258 | +1 (= splice) |
+| rcN | hkl3 + lfb5 (ntA) | 27,400 | 2,257 | tie, 3,144 oracle slots |
+| rcP4 | fru5 (now the 4th literal: rc1964 adds one) | 27,400 | 2,240 | -17 (as on 5998913) |
+| rcA / rcA4 | VC basin A (VCsh+t1n) / + fru5 | 27,400 | 2,216 / 2,200 | -41 / -57: rc1964's colour re-sort does not reach VC's V colour artefact |
+| rcF4 | fl4 | 27,352 | 2,123 | -134 (fl4 was -136 on 5998913) |
+| rcL5 | `cashback:read_volatile(&curve.is_cashback_coin)` at the CtoState literal | 27,416 | 1,732 | collapse: +16 B, not w17a03's -16 B IR pin L2735 |
+| rcGL5 / rcDL5 / rcGL7 | g1+t1n (or g1+t3n) + that L2735 / the L2737 spelling | 27,408 / 27,408 / 27,400 | 1,774 / 1,774 / 2,084 | collapse |
+
+The plain `read_volatile` of the flag at the literal is not the IR pin: in the post-opt IR the CtoState flags are re-read
+from the curve at their uses, so w17a03's L2735/L2737 pin one of those later loads. Until a source spelling reproduces
+the -16 B pin, the library still has no free repay, and every lead stays off-size: on main 442ae70 the splice translation
+(`tools/tnew.py`, exact for the rc captures above) prices g1 2,259 @27,520, crl3 / C3b 2,258 @27,472 / 27,488,
+g1t1n 2,257 @27,416 and 22 zero-byte ties at 2,257. v4320 and rc1964 are additive with every w16 lead (their hunks are
+in the TCF only), so the w16 repay tables carry over with dM unchanged.
+
+### W17-5. Slots tie-break composite (this lane's PR): sharing CPI `if let` + pool_authority `rent_epoch` re-read
+
+The splice translation of every cached capture onto the new main also prices positional slots (`oracle.metric`). One
+zero-byte tie has fewer slots than main: w15a03's `F_ev_reset_early__rP_back` (= `sh_iflet+rP_back`, byte for byte).
+Its two edits are size-complementary and each loses alone, but together they tie main's M with 8 fewer differing slots:
+
+| capture (main 442ae70, raw-IR oracle) | edit | bytes | M | oracle slots |
+| --- | --- | ---: | ---: | ---: |
+| main (rc0) | - | 27,400 | 2,257 | 3,140 |
+| rS3 `rP_back` | pool_authority clone `rent_epoch:a.pool_authority.rent_epoch` | 27,408 | 2,253 | - |
+| rS4 `ev_reset_early` | `let reset=sharing_update.is_some();` before the match | 27,392 | 2,251 | - |
+| rS2 `sh_iflet+rP_back` | sharing CPI `if let Some(val)=sharing_update{..}` + rP_back | 27,400 | 2,257 | **3,132** |
+| rS1 `ev_reset_early+rP_back` | | 27,400 | 2,257 | 3,132 (byte-identical to rS2) |
+
+`measure.sh` on main d4dfb04 (after #3934 landed during the lane): normalized 1034, raw 1034, zero losses, admin_cto
+0.67645 (= main) with **slots_diff 3,141 -> 3,133**, 27,400 B; differential 388 cases, 0 mismatches. land.py ranks
+admin_cto by (size distance, -ratio, slots), so equal ratio with fewer slots is strictly closer. The spelling is
+ordinary Rust (no shim): the `if let` is the original's sharing-CPI `?` polarity (w16a02), and the re-read through
+`a.pool_authority` is #3437's pre-PR spelling of that one field. w15a03 measured the pair as a tie on 86e2a6b (M only).
 
 ## 1. One catalog on the current main (`tools/cat16b.py`, `data/sizeknobs-w16b.json`)
 

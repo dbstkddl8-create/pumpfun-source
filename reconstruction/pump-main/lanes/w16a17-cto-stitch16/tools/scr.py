@@ -71,5 +71,5 @@ def work(w):
         st='compile-failed' if 'error' in r else 'analyzed'
         data={'output':f'{OUT}/rx/{name}','target':{'ratio':r.get('ratio'),'slots_diff':r.get('slots_diff'),'cand_bytes':r.get('bytes'),'M':r.get('M')},
               'notes':f'stitch16 raw-IR oracle (capraw+rx) on main {BASESHA}: genes {gs}; main M {BM}; eq_main {r.get("eq_main")}'+(' '+r.get('error','')[:120] if 'error' in r else '')}
-        subprocess.run(['python3',L,'record','--lane',LANE,'--approach','stitch16','--target','0x22a10','--dedupe-key',f'0x22a10-w16-{BASESHA}-stitch16-{name}-v1','--hypothesis',f'stitch16 raw-IR screen on main {BASESHA}: {gs}','--status',st,'--data',json.dumps(data)],capture_output=True)
+        subprocess.run(['python3',L,'record','--lane',LANE,'--approach','stitch16','--target','0x22a10','--dedupe-key',f'0x22a10-w16-{BASESHA}-stitch16-{name}-v1','--hypothesis',f'stitch16 raw-IR screen on main {BASESHA}'+os.environ.get('HYPX','')+f': {gs}','--status',st,'--data',json.dumps(data)],capture_output=True)
 ts=[threading.Thread(target=work,args=(i,)) for i in range(nw)]; [t.start() for t in ts]; [t.join() for t in ts]

@@ -19,7 +19,7 @@ NEW=open(ME+'/rx/main/fn.bin','rb').read(); OLD=open(ME+'/rx/main9bd/fn.bin','rb
 NB=splice.parse(NEW); OB=splice.parse(OLD); OBT=splice.targets(OB)
 NN=[splice.norm(x) for x in NB]; ON=[splice.norm(x) for x in OB]
 NEWV=splice.Var(OB,NEW)
-OLDS={'9bd38c7','86e2a6b','9120883','1cc4879'}; NEWS={'1f4e396','5998913','7e5ba44'}
+OLDS={'9bd38c7','86e2a6b','9120883','1cc4879'}; NEWS={'1f4e396','5998913','7e5ba44','1647da0'}
 TMH=[(1115,1133),(2425,2495)]
 NONSRC=re.compile(r'(__ra|__r$|__r_|p2__|^mp_|perm|_ra$|^ra_|^fs_|force|relab|^ir_|^IR|ra$|Br$|TB$|^mpp_|^jt_|^spl_|^B$)')
 def nonsrc(name,g):
@@ -40,7 +40,7 @@ def ev(p):
     return p,d
 def prov():
     P={}
-    for f in glob.glob(C+'/w1[56]*/res*.jsonl')+glob.glob(C+'/w1[56]*/data/res*.jsonl'):
+    for f in glob.glob(C+'/w1[5-7]*/res*.jsonl')+glob.glob(C+'/w1[5-7]*/data/res*.jsonl'):
         lane=f[len(C)+1:].split('/')[0]; m=re.search(r'res-([0-9a-f]{7})',os.path.basename(f))
         for l in open(f):
             try: r=json.loads(l)
@@ -56,13 +56,13 @@ def prov():
 def ledger():
     L=os.path.expanduser('~/.cache/pumpfun-reconstruction/pump-main/ATTEMPTS.jsonl'); R={}
     for l in open(L):
-        if '0x22a10' not in l or ('w15' not in l and 'w16' not in l): continue
+        if '0x22a10' not in l or ('w15' not in l and 'w16' not in l and 'w17' not in l): continue
         try: d=json.loads(l)
         except Exception: continue
-        k=d.get('dedupe_key',''); m=re.match(r'0x22a10-w1[56]-([0-9a-f]{7})-',k)
+        k=d.get('dedupe_key',''); m=re.match(r'0x22a10-w1[5-7]-([0-9a-f]{7})-',k)
         dd=d.get('data') if isinstance(d.get('data'),dict) else {}
         mo=re.search(r'/rx/([^/]+)/?$',str(dd.get('output','')))
-        m2=re.match(r'0x22a10-w1[56]-\w+-[\w]+?-(.+)-v\d+$',k)
+        m2=re.match(r'0x22a10-w1[5-7]-\w+-[\w]+?-(.+)-v\d+$',k)
         nm=mo.group(1) if mo else (m2.group(1) if m2 else None)
         if nm: R[(d.get('lane',''),nm)]={'hyp':str(d.get('hypothesis',''))[:300],'sha':m.group(1) if m else None}
     return R
@@ -75,7 +75,7 @@ if __name__=='__main__':
         del a[i:i+2]
     if '--np' in a: i=a.index('--np'); NP=int(a[i+1]); del a[i:i+2]
     os.makedirs(TX,exist_ok=True)
-    paths=sorted(glob.glob(C+'/w15*/rx/*/fn.bin')+glob.glob(C+'/w16*/rx/*/fn.bin'))
+    paths=sorted(glob.glob(C+'/w15*/rx/*/fn.bin')+glob.glob(C+'/w16*/rx/*/fn.bin')+glob.glob(C+'/w17*/rx/*/fn.bin')+glob.glob(C+'/w17*/rx/*/*/fn.bin'))
     groups={}
     for p in paths:
         if '/w16a17-cto-stitch16/' in p: continue
