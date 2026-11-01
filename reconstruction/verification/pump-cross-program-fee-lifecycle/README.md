@@ -35,8 +35,8 @@ One deterministic fixture executes 11 distinct transactions per image:
 1. `buy_v2` for creator A; this also creates the user volume accumulator.
 2. `sweep_creator_fee` drains the accrued pool fee into A's creator vault.
 3. `collect_coin_creator_fee` pays A.
-4. Pump Main `admin_cto` changes A to B through captured PumpSwap and Pump Fees
-   CPIs.
+4. Pump Main `admin_cto` changes A to B through captured PumpSwap CPI.
+   The Fees image is loaded but this fixture does not invoke the Fees program.
 5. A later `buy_v2` accrues fees for B.
 6. One transaction runs `buy_v2` and then attempts B-to-C Admin CTO without a
    sweep. Captured execution returns `CreatorFeesNotSwept`; every tracked
@@ -164,7 +164,10 @@ uv run --offline --python 3.12 --with solders==0.27.1 python -m unittest -v \
   archival mainnet pre-trade state.
 - PumpSwap, Pump Fees, SPL Token, and Associated Token remain captured
   dependencies on both sides. This package differentially isolates Pump Main;
-  it does not compare rebuilt dependency programs.
+  it does not compare rebuilt dependency programs. The observed fixture invokes
+  Pump, PumpSwap, SPL Token and Associated Token; no Pump Fees CPI is observed.
+  Loading the Fees image and reading its fee-config state do not establish Fees
+  execution coverage.
 - Complete snapshots cover every account constructed or addressed by the
   lifecycle, not arbitrary unreferenced VM accounts.
 - Raw compute units and source-path-bearing log scaffolding are diagnostic.
