@@ -68,6 +68,7 @@ class RunnerParentDeathTests(unittest.TestCase):
             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
         )
         self.addCleanup(runner.kill)
+        self.addCleanup(runner.stderr.close)
         self.assertTrue(self.wait_for(marker.exists, 10), 'trial child did not start')
         child = int(marker.read_text(encoding='ascii'))
 
