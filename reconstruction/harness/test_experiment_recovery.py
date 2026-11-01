@@ -162,6 +162,18 @@ class ExperimentRecoveryTests(unittest.TestCase):
         ])
         self.assertEqual((stale / 'output/partial').read_text(), 'partial\n')
 
+    def test_previous_published_attempt_remains_byte_identical(self):
+        first = E.run_trial(self.source, self.pass_command, self.destination)
+        old = self.destination / first['attempt']
+        before = {path.relative_to(old).as_posix(): path.read_bytes()
+                  for path in old.rglob('*') if path.is_file()}
+        (self.source / 'value').write_text('different source\n', encoding='ascii')
+        second = E.run_trial(self.source, self.pass_command, self.destination)
+        self.assertNotEqual(second['attempt'], first['attempt'])
+        after = {path.relative_to(old).as_posix(): path.read_bytes()
+                 for path in old.rglob('*') if path.is_file()}
+        self.assertEqual(after, before)
+
 
 if __name__ == '__main__':
     unittest.main()

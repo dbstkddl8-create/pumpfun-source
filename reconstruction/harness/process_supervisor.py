@@ -133,8 +133,10 @@ class SupervisedProcess:
                     or os.getpgid(guardian.pid) != group):
                 raise SupervisionError('guardian process-group ownership check failed')
             os.unlink(guardian_source); guardian_source = None
-            return cls(guardian, control_write, status_read, remainder, command,
-                       group, trial_pid)
+            result = cls(guardian, control_write, status_read, remainder, command,
+                         group, trial_pid)
+            control_write = -1; status_read = -1
+            return result
         except BaseException:
             if guardian is not None:
                 _terminate_owned_group(guardian, guardian.pid, None)
@@ -145,7 +147,8 @@ class SupervisedProcess:
                     os.unlink(guardian_source)
                 except FileNotFoundError:
                     pass
-            for descriptor in (control_read, config_read, config_write, status_write):
+            for descriptor in (control_read, control_write, config_read, config_write,
+                               status_read, status_write):
                 if descriptor >= 0:
                     os.close(descriptor)
 

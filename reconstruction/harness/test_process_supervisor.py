@@ -63,6 +63,19 @@ class ProcessSupervisorTests(unittest.TestCase):
         self.assertEqual((self.root / 'stdout.log').read_text().splitlines(),
                          ['trial-output'] * 3)
 
+    def test_process_start_failure_is_bounded(self):
+        stdout = (self.root / 'start-stdout.log').open('wb')
+        stderr = (self.root / 'start-stderr.log').open('wb')
+        self.addCleanup(stdout.close); self.addCleanup(stderr.close)
+        started = time.monotonic()
+        with self.assertRaises(OSError):
+            SupervisedProcess.start(
+                ['/definitely/missing/experiment-command'],
+                executable='/definitely/missing/experiment-command', cwd=self.root,
+                stdout=stdout, stderr=stderr, env=os.environ,
+            )
+        self.assertLess(time.monotonic() - started, 5)
+
     def test_timeout_stops_trial_and_same_group_grandchild(self):
         marker = self.root / 'pids'
         script = r'''
