@@ -14,6 +14,7 @@ slot) and prints the optimized IR's branches and weights.
 | `core::intrinsics::unlikely(c)` / `likely(c)` (`#![feature(core_intrinsics)]`) | **none** | The intrinsic is codegen'd into a 1-byte alloca (`store`/`load`/`trunc`) before the branch. LowerExpectIntrinsic runs in the early function pipeline, before SROA, so it never sees `br (llvm.expect ..)` and drops the hint. |
 | `extern "C"{#[link_name="llvm.expect.i1"]fn expect(b:bool,v:bool)->bool;}` (`#![feature(link_llvm_intrinsics)]`) | **`branch_weights 1:2000`** (or 2000:1) | The call returns an immediate `i1` that the `br` uses directly. The weight survives to llc. |
 | `#[cold] fn cold(){}` called in the branch | none in the final IR | BPI's cold-call weight (1:16) exists only until `cold()` is inlined, so it steers the inliner and early passes, not llc. |
+| **`extern "C"{#[link_name="llvm.expect.with.probability.i1"]fn expect_p(b:bool,v:bool,p:f64)->bool;}`** | **any ratio** (`p=0.6667` gives `1431727348:715756301` = 2:1) | Same lowering as `llvm.expect`, with the probability as a constant argument. Every IR-oracle `!prof` result (20:12, 12:20, 2:1, 1:16, ...) now has a source spelling. |
 
 So `core::intrinsics::{likely,unlikely}` cannot steer anything here; a shim that needs a persistent weight must use the
 `llvm.expect.i1` extern (y1-cto-llvm found the same on 2026-10-30). The feature gate goes on line 1 of `lib.rs`
@@ -34,6 +35,8 @@ payload through a raw pointer avoids the re-test.
 | x3 | x307 + x312 | 27,040 | 0.58224 | collapse |
 | tfc306 | tf_g3 creator binding + `cold()` at 306 Some | 27,024 | 0.66385 | = tf_g3_O class (outline, no llc-time weight) |
 | tfx306n | tf_g3 + `if expect(new.is_some(),false){new.unwrap_or_default()}` | 27,456 | 0.67335 | no outline: the unwrap re-test drops the hint |
+| tfr306n | tf_g3 + `if expect(new.is_none(),true){Err}else{raw payload read}` (None 2000:1) | 27,112 | 0.67148 (M 2,230) | 307/312 outlined (lddw 86), no collapse |
+| tfr306s | tf_g3 + same with `false` (Some 2000:1) | 27,288 | 0.67237 (M 2,240) | one to_string outlined (lddw 87) |
 
 Every outline on main's own form collapses (as w15a25/w16a13 found for every V-time trigger). On the tf_g3 base the
 transient cold call reproduces the IR-forced O base, so the remaining lever is the llc-time layout weight.

@@ -67,3 +67,14 @@ for k,(a,b) in SITES.items():
 L306R='  let t=if unsafe{expect(new.is_none(),%s)}/*shim: 306 weight*/{return Err(error!(PumpError::CtoNewCreatorRequired));}else{unsafe{core::ptr::read_unaligned((&new as *const Option<Pubkey> as *const u8).add(1) as *const Pubkey)}/*shim: 306 payload read, no tag re-test*/};'
 G['r306n']=FG+EXD+[('cto',L306,L306R%'true')]
 G['r306s']=FG+EXD+[('cto',L306,L306R%'false')]
+# ---- arbitrary probabilities: llvm.expect.with.probability.i1 (LowerExpect turns p into branch_weights) ----
+EXP=[('cto','\n\n#[derive(Accounts)]','\nextern "C"{#[link_name="llvm.expect.with.probability.i1"]fn expect_p(b:bool,v:bool,p:f64)->bool;#[link_name="llvm.expect.i1"]fn expect(b:bool,v:bool)->bool;}/*shim: llvm.expect(.with.probability) branch weights (core::intrinsics::unlikely emits none on rustc 1.79-dev)*/\n#[derive(Accounts)]')]
+L306P='  let t=if unsafe{expect_p(new.is_none(),true,%s)}/*shim: 306 None probability*/{return Err(error!(PumpError::CtoNewCreatorRequired));}else{unsafe{core::ptr::read_unaligned((&new as *const Option<Pubkey> as *const u8).add(1) as *const Pubkey)}/*shim: 306 payload read, no tag re-test*/};'
+for nm,p in (('50','0.5'),('60','0.625'),('67','0.6667'),('75','0.75'),('80','0.8'),('90','0.9'),('97','0.97'),('99','0.995'),('33','0.3333'),('20','0.2'),('10','0.1'),('03','0.03'),('01','0.005')):
+    G['p306_'+nm]=FG+EXP+[('cto',L306,L306P%p)]
+def EXPP(cond,p):
+    return 'unsafe{expect_p('+cond+',true,'+p+')}'
+for k,(a,b) in SITES.items():
+    for nm,p in (('h','0.625'),('l','0.375')):
+        bb=b.replace('unsafe{expect(','unsafe{expect_p(').replace(',%s)}',',true,'+p+')}')
+        G[k+nm]=FG+EXP+[('cto',a,bb)]
