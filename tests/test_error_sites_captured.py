@@ -242,10 +242,11 @@ class ErrorSitesCapturedTests(unittest.TestCase):
             if 6000 <= code < 7000:
                 custom += 1
                 with self.subTest(code=code):
-                    # An error without a #[msg] has no IDL text to compare.
                     name, message = answer.split('\t')
                     self.assertEqual(name, expected[code]['name'])
-                    self.assertEqual(message, expected[code].get('msg', message))
+                    # Without a #[msg] the IDL names no text; Solana reports the error's
+                    # name instead, so a default of the observed text proved nothing.
+                    self.assertEqual(message, expected[code].get('msg', expected[code]['name']))
         self.assertGreaterEqual(custom, 30)
 
     def test_checker_rejects_a_moved_line(self):

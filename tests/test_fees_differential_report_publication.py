@@ -14,6 +14,8 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tests"))
+from published_case_count import assert_case_count
 RUNNERS = (
     "fees_donation_create_differential",
     "fees_deprecated_differential",
@@ -133,7 +135,7 @@ class FeesDifferentialReportPublicationTests(unittest.TestCase):
                 self.assertEqual(completed.returncode, 0, completed.stderr)
                 report = json.loads(output.read_bytes())
                 self.assertEqual(report["mismatches"], [])
-                self.assertGreater(report.get("case_count", len(report["cases"])), 0)
+                assert_case_count(self, report)
                 self.assertEqual([p.name for p in output.parent.iterdir()], [output.name])
 
 

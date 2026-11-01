@@ -12,6 +12,17 @@ HERE = Path(__file__).resolve().parent
 sha = lambda value: hashlib.sha256(value).hexdigest()
 
 
+def same_json(left, right):
+    """JSON receipt values must agree without bool/int/float coercion."""
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, dict):
+        return left.keys() == right.keys() and all(same_json(left[k], right[k]) for k in left)
+    if isinstance(left, list):
+        return len(left) == len(right) and all(same_json(a, b) for a, b in zip(left, right))
+    return left == right
+
+
 def main():
     hashes = json.loads((HERE/'receipt-files.json').read_text(encoding='utf-8'))
     for name, digest in hashes.items():
@@ -58,6 +69,20 @@ def main():
                 assert report['candidate_sha256'] == report['original_sha256'] == summary['capture_sha256']
                 assert report['cases'] and not report['mismatches']
                 assert len(report['cases']) == comparison['comparison'][script]['case_count']
+                # `mismatches` is the producer's claim about the whole report.
+                # Compare each row's own comparison too, so a row that disagrees
+                # cannot ride on an empty header.
+                for row in report['cases']:
+                    assert isinstance(row, dict), (script, 'row must be an object')
+                    label = row.get('case') or row.get('mutation') or row.get('instruction')
+                    assert isinstance(row['original'], dict) and isinstance(row['candidate'], dict), (script, label)
+                    assert same_json(row['original'], row['candidate']), (script, label)
+                    markers = {'diff', 'different_fields', 'match'} & row.keys()
+                    assert markers, (script, label, 'comparison claim missing')
+                    for marker in markers & {'diff', 'different_fields'}:
+                        assert type(row[marker]) is list and row[marker] == [], (script, label, marker)
+                    if 'match' in markers:
+                        assert row['match'] is True, (script, label, 'match')
                 retained[stage][script] = report
     for script in transition['before']:
         left,right = retained['before'][script],retained['after'][script]

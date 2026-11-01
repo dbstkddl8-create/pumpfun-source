@@ -9,8 +9,11 @@ ROOT=Path(__file__).resolve().parents[2]
 class CaptureContextTests(unittest.TestCase):
  def test_string_encoding_option_remains_supported(self):
   response={'context':{'slot':100},'value':None}
-  with mock.patch.object(capture_retry,'_archived_rpc',return_value=response):
+  with mock.patch.object(capture_retry,'_archived_rpc',return_value=response) as rpc:
    self.assertEqual(capture_retry.contextual_rpc('local','getAccountInfo',['pubkey','base64']),response)
+  # The archived capture always sends a config object; the string form is kept
+  # for callers that still pass it, so the transport must receive it untouched.
+  rpc.assert_called_once_with('local','getAccountInfo',['pubkey','base64'])
  def test_non_integer_minimum_is_rejected_as_value_error(self):
   response={'context':{'slot':100},'value':None}
   for minimum in ('100',True,100.5,-1):
