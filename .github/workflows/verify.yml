@@ -75,6 +75,7 @@ jobs:
           - suite: admin-frame-diagnostics
             commands: |
               python -B reconstruction/pump-main/lanes/w12a02-cto-iroracle/test_diagnostics.py
+              python -B reconstruction/pump-main/lanes/w14a88-cto-sweeptagmem/test_mv.py
           - suite: composition-patch-bytes
             commands: |
               python -B reconstruction/harness/test_integrate_failures.py
