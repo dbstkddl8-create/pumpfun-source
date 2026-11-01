@@ -104,6 +104,8 @@ if __name__ == '__main__':
     if options.report:
         with options.report.open('x', encoding='utf-8') as stream:
             json.dump({'python': sys.version, 'passed': passed,
+                       'tests_run': result.result.testsRun,
+                       'skipped': [case.id() for case, _ in result.result.skipped],
                        'runs': RUNS}, stream, indent=2)
             stream.write('\n')
     sys.exit(0 if passed else 1)

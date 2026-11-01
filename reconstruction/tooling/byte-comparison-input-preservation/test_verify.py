@@ -217,12 +217,25 @@ if __name__ == '__main__':
     passed = (run.result.wasSuccessful() and run.result.testsRun == 5
               and not run.result.skipped)
     if options.report:
+        # setUpClass does not run for a filtered or wholly skipped suite.
+        tool = getattr(ByteComparisonInputTests, 'tool', None)
+        tool_metadata = {'objdump_sha256': None, 'objdump_version': None}
+        if tool is not None:
+            try:
+                tool_metadata.update(
+                    objdump_sha256=sha(tool.read_bytes()),
+                    objdump_version=subprocess.check_output([OBJDUMP, '--version'], text=True).splitlines()[0])
+            except (OSError, subprocess.SubprocessError, IndexError) as error:
+                tool_metadata['objdump_error'] = str(error)
+                passed = False
         with options.report.open('x', encoding='utf-8') as stream:
             json.dump({'python': sys.version, 'objdump': str(OBJDUMP),
-                       'objdump_sha256': sha(ByteComparisonInputTests.tool.read_bytes()),
-                       'objdump_version': subprocess.check_output([OBJDUMP, '--version'], text=True).splitlines()[0],
+                       **tool_metadata,
                        'candidate_sha256': EXPECTED_CANDIDATE,
-                       'source_sha256': {name: sha(content) for name, content in ByteComparisonInputTests.sources.items()},
+                       'source_sha256': {name: sha(content) for name, content in
+                                         getattr(ByteComparisonInputTests, 'sources', {}).items()},
+                       'tests_run': run.result.testsRun,
+                       'skipped': [case.id() for case, _ in run.result.skipped],
                        'passed': passed, 'runs': RUNS}, stream, indent=2)
             stream.write('\n')
     sys.exit(0 if passed else 1)

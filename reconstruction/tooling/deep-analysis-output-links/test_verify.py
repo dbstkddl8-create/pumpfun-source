@@ -113,14 +113,18 @@ if __name__ == '__main__':
     # still exits 0 through wasSuccessful(), so the count and the skip set are
     # checked here.
     skipped = {case.id().rsplit('.', 1)[-1] for case, _ in run.result.skipped}
+    allowed_skips = ({'test_windows_directory_junctions_reject_before_publication'}
+                     if os.name != 'nt' else set())
     passed = (run.result.wasSuccessful() and run.result.testsRun == 4
-              and skipped <= {'test_windows_directory_junctions_reject_before_publication'})
+              and skipped <= allowed_skips)
     if options.report:
         inputs = [*(f'scripts/{name}' for name in SCRIPTS),
                   'scripts/analyze_program.py', 'scripts/window_elf_reader.py',
                   'evidence/original/mayhem/deployed.so']
         report = {'python': sys.version, 'platform': sys.platform,
                   'passed': passed, 'runs': RUNS,
+                  'tests_run': run.result.testsRun,
+                  'skipped': [case.id() for case, _ in run.result.skipped],
                   'inputs': {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
                              for name in inputs}}
         with options.report.open('x', encoding='utf-8') as stream:
