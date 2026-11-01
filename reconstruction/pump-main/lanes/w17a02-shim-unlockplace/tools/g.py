@@ -78,3 +78,7 @@ for k,(a,b) in SITES.items():
     for nm,p in (('h','0.625'),('l','0.375')):
         bb=b.replace('unsafe{expect(','unsafe{expect_p(').replace(',%s)}',',true,'+p+')}')
         G[k+nm]=FG+EXP+[('cto',a,bb)]
+# 312 compares with mild probabilities (equal-likely 20:12 etc.), each compare separately
+for nm,p in (('h','0.625'),('l','0.375')):
+    G['x312a'+nm]=FG+EXP+[('cto',L312,L312.replace('if t==*sharing||t==*holder_key{','if unsafe{expect_p(t==*sharing,true,'+p+')}/*shim: 312a weight*/||t==*holder_key{'))]
+    G['x312b'+nm]=FG+EXP+[('cto',L312,L312.replace('if t==*sharing||t==*holder_key{','if t==*sharing||unsafe{expect_p(t==*holder_key,true,'+p+')}/*shim: 312b weight*/{'))]

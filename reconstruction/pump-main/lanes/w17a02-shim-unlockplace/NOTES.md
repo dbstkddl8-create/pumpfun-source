@@ -1,7 +1,13 @@
 # w17a02-shim-unlockplace: branch-hint shims for admin_cto block placement and inlining (notes)
 
 Target `0x22a10` `admin_cto::execute` (`programs/pump/src/creator/admin_cto.rs`), pinned at 27,400 B.
-Base: main 599891304 (origin/main 1647da0f2 has the same `programs/pump/src`): 0.67436, 3,141 slots, M 2,251.
+Base: main 599891304 (0.67436, 3,141 slots, M 2,251) at the start; merged with main 442ae70ca (w17a03 read_volatile pin
+and w17a04 weighted Rc-clone trap: 0.67615, 3,141 slots).
+
+**Result: the 312 `t==sharing` compare at 20:12 equal-likely (`llvm.expect.with.probability`, p 0.625) lifts admin_cto
+0.67615 -> 0.67645 (+1 M) at 27,400 B with zero normalized/raw losses (merged build `b924a29e`, differential 388/388).**
+On 599891304 alone it gave 0.67436 -> 0.67466 (`56e118d3`). The weight on the second compare (`t==*holder_key`) gives
+the same bytes.
 Ledger: approach `shimunlock`, keys `0x22a10-w17-5998913-shimunlock-<trial>-v1`.
 
 ## 1. Which branch-hint spellings work on the identity toolchain (rustc 1.79.0-dev, LLVM 18.1.7)
@@ -40,3 +46,22 @@ payload through a raw pointer avoids the re-test.
 
 Every outline on main's own form collapses (as w15a25/w16a13 found for every V-time trigger). On the tf_g3 base the
 transient cold call reproduces the IR-forced O base, so the remaining lever is the llc-time layout weight.
+
+## 3. llc-only weight sweep (`tools/bws.py`, about 1 s per run, no build slot)
+
+`bws.py <m.ll> <out.jsonl> [workers]` sets one `br`'s `!prof` in a slim post-opt module of `execute` (w16a06 `rx/m1/m.ll`
+reproduces main 599891304 exactly, M 2,251) and runs llc; `BASEW="i:a:b;..."` fixes other weights first. Weights
+20:12, 12:20, 2:1, 1:2, 1:2000, 2000:1 on all 108 conditional branches (648 runs, about 5 minutes):
+
+| IR branch (line) | what | weight | M @27,400 |
+| --- | --- | --- | ---: |
+| 4462 `%_7.i.i49.i` | Rc `inc_strong` overflow trap (an AccountInfo `lamports`/`data` clone) | 1:2000 | 2,257 (+6) |
+| 4549 / 4677 / 4505 | other Rc `inc_strong` traps | 1:2000 | 2,253 / 2,253 / 2,252 |
+| 3032 `%97` / 3101 `%113` | 312 memcmp `t==sharing` / `t==holder_key` equal | 20:12 | 2,252 |
+| 3338 `%quote_locked` | 326 quote_locked true | 20:12 | 2,252 (the source `expect_p(st.quote_locked,..)` build is byte-identical to main: GVN forwards the flag) |
+| 3364 `%or.cond.not.i` | 338 fee range | 12:20 or 1:2 | 2,252 (the source weight on `f==0||f>max` loses: 0.66177) |
+| 5410 `%570` | sweep exit tag==2 | 1:2000 | 2,252 |
+
+The Rc trap is the lever w17a04 landed (#3950) with a hand-written `rcinc`. With 3032 fixed at 20:12 the best pair is the
+4462 trap (M 2,258). Source builds of the mild weights on 599891304: `x312ah`/`x312bh` 0.67466 (gain), `v326h`
+byte-identical, `v326l` byte-identical, `v338h` 0.66177, `v338l` 0.65768 @27,392, `gateh` 0.67286.
