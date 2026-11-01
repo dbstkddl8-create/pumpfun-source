@@ -101,7 +101,12 @@ def matrix_rows(job):
 
 
 def substitute(value, row):
-    return EXPRESSION.sub(lambda m: str(row.get(m[1], m[0])), value)
+    def render(match):
+        item = row.get(match[1], match[0])
+        if isinstance(item, bool):
+            return 'true' if item else 'false'
+        return str(item)
+    return EXPRESSION.sub(render, value)
 
 
 def join_line_continuations(command):
