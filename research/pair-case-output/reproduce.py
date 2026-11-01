@@ -1,4 +1,6 @@
 """Real macOS CLI proof of paired-build source preservation; no compiler runs."""
+if not __debug__:
+    raise SystemExit('Normal Python is required; do not use -O, -OO or PYTHONOPTIMIZE.')
 import hashlib
 import json
 import os
