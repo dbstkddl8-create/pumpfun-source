@@ -28,7 +28,8 @@ def run(text,name,keep=False,mp=False,nice=True):
     if r.returncode: return {'name':name,'err':'llc:'+r.stderr[-600:]}
     b=oracle.elf_fn(d+'/m.o',oracle.KEEP); open(d+'/fn.bin','wb').write(b); os.remove(d+'/m.o')
     M,ratio=Mof(b)
-    res={'name':name,'M':M,'ratio':round(ratio,5),'bytes':len(b),'secs':round(time.time()-t0,1)}
+    import hashlib
+    res={'name':name,'M':M,'ratio':round(ratio,5),'bytes':len(b),'secs':round(time.time()-t0,1),'sig':hashlib.sha1(b''.join(oracle.mask(b))).hexdigest()[:12]}
     if mp:
         q=subprocess.run(['python3',T+'/mp.py','mp_'+name,d+'/m.ll'],capture_output=True,text=True)
         try:
