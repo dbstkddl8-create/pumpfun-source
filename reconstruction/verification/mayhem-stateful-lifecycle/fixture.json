@@ -21,10 +21,10 @@
       "name": "admin_gate_atomic_retry",
       "steps": [
         {"name": "stop", "instructions": ["stop_trading"], "expect": "success"},
-        {"name": "paused_buy", "instructions": ["buy"], "expect": "failure"},
-        {"name": "unauthorized_resume", "instructions": ["resume_trading_unauthorized"], "expect": "failure"},
+        {"name": "paused_buy", "instructions": ["buy"], "expect": "failure", "error_contains": "InstructionErrorCustom(6000)"},
+        {"name": "unauthorized_resume", "instructions": ["resume_trading_unauthorized"], "expect": "failure", "error_contains": "InstructionErrorCustom(2001)"},
         {"name": "resume", "instructions": ["resume_trading"], "expect": "success"},
-        {"name": "atomic_stop_buy", "instructions": ["stop_trading", "buy"], "expect": "failure"},
+        {"name": "atomic_stop_buy", "instructions": ["stop_trading", "buy"], "expect": "failure", "error_contains": "InstructionErrorCustom(6000)"},
         {"name": "valid_retry", "instructions": ["buy"], "expect": "success"},
         {"name": "atomic_buy_sell", "instructions": ["buy", "sell"], "expect": "success"}
       ]

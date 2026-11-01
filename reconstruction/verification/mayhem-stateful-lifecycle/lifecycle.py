@@ -303,6 +303,13 @@ class LifecycleVM:
             "signatures": [str(value) for value in tx.signatures],
             "signature_verification": tx.verify_with_results(),
             "recent_blockhash": str(blockhash),
+            "account_roles": {
+                "admin_trader": str(ADMIN.pubkey()),
+                "payer": str(PAYER.pubkey()),
+                "intruder": str(INTRUDER.pubkey()),
+                "mayhem_program": str(MAYHEM),
+                **{name: str(value) for name, value in self.keys.__dict__.items()},
+            },
             "error": str(result.err()) if failed else None,
             "before": before,
             "after": after,
