@@ -133,6 +133,9 @@ def main():
         if entry["name"] == "quote_control":
             check(selected["cases"] == entry["cases"] == len(selected["results"]), "claim verification failed: selected['cases'] == entry['cases'] == len(selected['results'])")
             check(selected["mismatches"] == 0, "claim verification failed: selected['mismatches'] == 0")
+            # The header is only admitted when the retained rows say the same.
+            check(not any(row.get("matches") is not True for row in selected["results"]),
+                  "claim verification failed: not any(row.get('matches') is not True for row in selected['results'])")
             check(isinstance(selected.get("bound_inputs_sha256"), dict) and selected["bound_inputs_sha256"],
                   "claim verification failed: quote-control receipt binds no input")
             for path, expected in selected["bound_inputs_sha256"].items():
