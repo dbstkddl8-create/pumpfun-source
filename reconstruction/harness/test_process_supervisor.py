@@ -101,6 +101,47 @@ time.sleep(30)
         self.assertTrue(self.wait_for_dead(trial), 'trial survived timeout cleanup')
         self.assertTrue(self.wait_for_dead(grandchild), 'grandchild survived timeout cleanup')
 
+    def test_normal_exit_stops_ordinary_grandchildren(self):
+        for code in (0, 1, 7):
+            with self.subTest(code=code):
+                marker = self.root / f'grandchild-{code}'
+                child = ('import os,time; from pathlib import Path; '
+                         f'Path({str(marker)!r}).write_text(str(os.getpid())); time.sleep(20)')
+                leader = ('import subprocess,sys,time; from pathlib import Path; '
+                          f'subprocess.Popen([sys.executable,"-c",{child!r}]); '
+                          f'p=Path({str(marker)!r}); deadline=time.monotonic()+5\n'
+                          'while not p.exists() and time.monotonic()<deadline: time.sleep(.01)\n'
+                          f'raise SystemExit({code})')
+                process = self.start(leader)
+                self.assertEqual(process.wait(timeout=6), code)
+                grandchild = int(marker.read_text())
+                process.terminate()
+                self.assertTrue(self.wait_for_dead(grandchild), 'ordinary grandchild survived normal completion')
+
+    def test_stopped_guardian_fallback_kills_term_ignoring_group(self):
+        marker = self.root / 'stopped-guardian-pids'
+        script = r'''
+import os,signal,subprocess,sys,time
+from pathlib import Path
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+child = subprocess.Popen([sys.executable, '-c', 'import signal,time; signal.signal(signal.SIGTERM,signal.SIG_IGN); time.sleep(20)'])
+Path(sys.argv[1]).write_text(f'{os.getpid()} {child.pid}')
+time.sleep(20)
+'''
+        process = self.start(script, marker)
+        deadline = time.monotonic() + 5
+        while not marker.exists() and time.monotonic() < deadline:
+            time.sleep(.01)
+        self.assertTrue(marker.exists())
+        trial, grandchild = map(int, marker.read_text().split())
+        self.assertEqual(os.getpgid(process.guardian.pid), process.guardian.pid)
+        os.kill(process.guardian.pid, signal.SIGSTOP)
+        started = time.monotonic()
+        process.terminate()
+        self.assertLess(time.monotonic() - started, 3)
+        self.assertTrue(self.wait_for_dead(trial))
+        self.assertTrue(self.wait_for_dead(grandchild))
+
     def test_ownership_mismatch_does_not_signal_unrelated_group(self):
         unrelated = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'],
                                      start_new_session=True)
@@ -108,6 +149,17 @@ time.sleep(30)
         self.addCleanup(unrelated.kill)
         with self.assertRaisesRegex(SupervisionError, 'without ownership'):
             _terminate_owned_group(unrelated, unrelated.pid + 100000, None)
+        self.assertIsNone(unrelated.poll())
+
+    def test_signal_helper_never_uses_dead_owner_to_signal_another_group(self):
+        dead_owner = subprocess.Popen([sys.executable, '-c', 'pass'], start_new_session=True)
+        dead_owner.wait(timeout=5)
+        unrelated = subprocess.Popen([sys.executable, '-c', 'import time;time.sleep(20)'],
+                                     start_new_session=True)
+        self.addCleanup(unrelated.wait)
+        self.addCleanup(unrelated.kill)
+        with self.assertRaisesRegex(SupervisionError, 'without ownership'):
+            _signal_owned_group(dead_owner, unrelated.pid, unrelated.pid, signal.SIGKILL)
         self.assertIsNone(unrelated.poll())
 
     def test_post_exit_permission_error_is_not_a_false_cleanup_failure(self):

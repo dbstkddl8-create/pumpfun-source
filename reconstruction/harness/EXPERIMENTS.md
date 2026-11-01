@@ -29,19 +29,24 @@ Each attempt retains stdout/stderr and all output files, with hashes in latest.j
 Every trial runs in a process group led by a small guardian. The experiment
 runner owns the guardian through a close-on-exec control pipe. Normal exits
 preserve the command's exact integer return code. Timeouts and Python-level
-interruptions terminate the validated owned group with bounded TERM/KILL
-cleanup. If the runner receives SIGTERM or SIGKILL, the pipe closes and the
-guardian kills its own group, including ordinary grandchildren. The guardian
-source bytes are frozen at runner import time and their hash participates in
-the experiment identity.
+interruptions close that pipe and request bounded cleanup. The guardian kills
+its own group on normal command completion as well as on EOF or a status-write
+failure, including ordinary grandchildren. A stopped guardian is killed only
+after checking that its live, unreaped PID still owns the group. A reaped
+guardian or historical trial PID is never used to authorize a later signal.
+If the runner receives SIGTERM or SIGKILL, the pipe closes and the guardian
+kills its own group. The guardian
+source bytes are compiled directly and frozen at runner import time; a cached
+bytecode file cannot substitute for those admitted bytes. Their hash
+participates in the experiment identity.
 
 This composes with, and does not replace, `build_process.py`'s compiler
 guardian added by PR #3339. The outer guardian stops the trial group; the
 compiler guardian still stops the nested compiler session if the trial itself
 is killed. A process that deliberately calls `setsid`, double-forks, or is
 otherwise detached can escape both ordinary process groups. The system also
-cannot guarantee cleanup if the guardian itself is independently SIGKILLed at
-the same time as its owner. Whole-machine crashes are subject to filesystem and
+cannot guarantee cleanup if the guardian itself is independently SIGKILLed.
+Whole-machine crashes are subject to filesystem and
 hardware durability. These are supervision guarantees, not a sandbox.
 
 ## Interrupted attempts and recovery
@@ -53,7 +58,7 @@ identity and one of these states:
   marks the attempt `interrupted` after its owned group is gone;
 - `interrupted`: partial stdout, stderr and output hashes are retained as
   evidence, but never reused as a result;
-- `completed`: the full result was synced, but publication may have been
+- `completed`: the result receipt and artifact hashes were synced, but publication may have been
   interrupted before `latest.json`; a matching attempt is fully revalidated
   before that pointer is repaired;
 - `published`: publication completed. Historical published attempts remain

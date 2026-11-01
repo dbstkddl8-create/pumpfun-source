@@ -10,6 +10,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 
 H = Path(__file__).resolve().parent
@@ -79,7 +80,10 @@ class ExperimentRecoveryTests(unittest.TestCase):
         return attempt
 
     @unittest.skipUnless(os.name == 'posix', 'requires POSIX signals')
+    @patch.dict(os.environ, {'XPC_SERVICE_NAME': '0'})
     def test_sigkill_recovery_retains_partial_attempt_and_retries(self):
+        # macOS normalizes this launcher variable on Python startup. Keep the
+        # private first-run and resumed fixtures on the same environment identity.
         marker = self.root / 'first.pid'
         command = [sys.executable, '-c', INTERRUPTIBLE, str(marker), '{out}']
         runner = subprocess.Popen(
@@ -185,6 +189,59 @@ class ExperimentRecoveryTests(unittest.TestCase):
         after = {path.relative_to(old).as_posix(): path.read_bytes()
                  for path in old.rglob('*') if path.is_file()}
         self.assertEqual(after, before)
+
+    def test_running_receipt_failure_still_cleans_started_process(self):
+        real_atomic = E.atomic_json
+        real_start = E.SupervisedProcess.start
+        processes = []
+        def remember_start(*args, **kwargs):
+            process = real_start(*args, **kwargs)
+            processes.append(process)
+            return process
+        def fail_running(path, value):
+            if value.get('state') == 'running':
+                raise OSError('controlled running receipt failure')
+            return real_atomic(path, value)
+        with patch.object(E.SupervisedProcess, 'start', side_effect=remember_start), \
+             patch.object(E, 'atomic_json', side_effect=fail_running):
+            with self.assertRaisesRegex(OSError, 'controlled running receipt failure'):
+                E.run_trial(self.source, [sys.executable, '-c', 'import time;time.sleep(20)'],
+                            self.destination)
+        self.assertEqual(len(processes), 1)
+        process = processes[0]
+        self.addCleanup(process.terminate)
+        self.assertIsNotNone(process.guardian.poll())
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            try:
+                os.kill(process.trial_pid, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(.01)
+        else:
+            self.fail('trial survived a running receipt persistence failure')
+        attempt, = self.destination.glob('attempt-*')
+        self.assertEqual(self.attempt_metadata(attempt)['state'], 'interrupted')
+        self.assertFalse((self.destination / 'latest.json').exists())
+
+    def test_recovery_does_not_signal_a_group_named_by_stale_metadata(self):
+        stale = self.make_stale_attempt()
+        unrelated = subprocess.Popen([sys.executable, '-c', 'import time;time.sleep(20)'],
+                                     start_new_session=True)
+        self.addCleanup(unrelated.wait)
+        self.addCleanup(unrelated.kill)
+        metadata = self.attempt_metadata(stale)
+        metadata.update(state='running', guardian_pid=unrelated.pid,
+                        process_group=unrelated.pid, trial_pid=unrelated.pid)
+        E.atomic_json(stale / 'attempt.json', metadata)
+        before = (stale / 'attempt.json').read_bytes()
+        with patch.object(E, 'RECOVERY_PROCESS_WAIT', .1), \
+             patch.object(E.SupervisedProcess, 'start') as start:
+            with self.assertRaisesRegex(ValueError, 'still active'):
+                E.run_trial(self.source, self.pass_command, self.destination)
+        start.assert_not_called()
+        self.assertIsNone(unrelated.poll())
+        self.assertEqual((stale / 'attempt.json').read_bytes(), before)
 
 
 if __name__ == '__main__':

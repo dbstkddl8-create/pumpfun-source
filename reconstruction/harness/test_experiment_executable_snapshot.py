@@ -174,6 +174,33 @@ class ExecutableSnapshotTests(unittest.TestCase):
         self.assertNotEqual(result['inputs']['supervisor_sha256'],
                             runner.digest(supervisor.read_bytes()))
 
+    def test_supervisor_source_admission_ignores_valid_executable_bytecode_cache(self):
+        import importlib._bootstrap_external as bytecode
+        driver = self.root / 'experiment_runner.py'
+        supervisor = self.root / 'process_supervisor.py'
+        marker = self.root / 'cache-executed'
+        raw = runner.SUPERVISOR_PATH.read_bytes()
+        supervisor.write_bytes(raw)
+        driver.write_bytes(Path(runner.__file__).read_bytes())
+        injected = ('from pathlib import Path\nPath(' + repr(str(marker)) + ').write_text("executed")\n').encode() + raw
+        code = compile(injected, str(supervisor), 'exec')
+        metadata = supervisor.stat()
+        cache = Path(importlib.util.cache_from_source(str(supervisor)))
+        cache.parent.mkdir()
+        cache.write_bytes(bytecode._code_to_timestamp_pyc(code, int(metadata.st_mtime), metadata.st_size))
+        # Prove this is executable cached code for the clean source file.
+        spec = importlib.util.spec_from_file_location('private_cached_supervisor', supervisor)
+        loaded = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(loaded)
+        self.assertTrue(marker.exists())
+        marker.unlink()
+        result = subprocess.run([sys.executable, '-I', '-B', '-c',
+            'import sys;sys.path.insert(0,sys.argv[1]);import experiment_runner as E;print(E.IMPLEMENTATION_SHA256)',
+            str(self.root)], capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse(marker.exists())
+        self.assertEqual(result.stdout.strip(), runner.digest(raw))
+
     @unittest.skipUnless(os.environ.get('PUMP_BUILD_TEST_SDK') and shutil.which('rustc'),
                          'requires the explicit SBF SDK and a host rustc')
     def test_real_rustc_probe_executes_the_compiler_it_hashed(self):

@@ -16,12 +16,15 @@ import time
 import uuid
 
 SUPERVISOR_PATH = Path(__file__).resolve().with_name('process_supervisor.py')
+SUPERVISOR_BYTES = SUPERVISOR_PATH.read_bytes()
 SUPERVISOR_SPEC = importlib.util.spec_from_file_location('_experiment_process_supervisor',
                                                         SUPERVISOR_PATH)
 if SUPERVISOR_SPEC is None or SUPERVISOR_SPEC.loader is None:
     raise ImportError(f'cannot load process supervisor from {SUPERVISOR_PATH}')
 SUPERVISOR = importlib.util.module_from_spec(SUPERVISOR_SPEC)
-SUPERVISOR_SPEC.loader.exec_module(SUPERVISOR)
+SUPERVISOR.__dict__['_ADMITTED_SOURCE_BYTES'] = SUPERVISOR_BYTES
+exec(compile(SUPERVISOR_BYTES, str(SUPERVISOR_PATH), 'exec', dont_inherit=True),
+     SUPERVISOR.__dict__)
 IMPLEMENTATION_SHA256 = SUPERVISOR.IMPLEMENTATION_SHA256
 SupervisedProcess = SUPERVISOR.SupervisedProcess
 SupervisionError = SUPERVISOR.SupervisionError
@@ -491,12 +494,12 @@ def run_trial(source, command, destination, inputs=(), timeout=300):
                 except SupervisionError as error:
                     reason = f'process supervision failed: {error}'
                 else:
-                    attempt_metadata = dict(
-                        attempt_metadata, state='running', guardian_pid=process.guardian.pid,
-                        process_group=process.process_group, trial_pid=process.trial_pid,
-                    )
-                    atomic_json(attempt / 'attempt.json', attempt_metadata)
                     try:
+                        attempt_metadata = dict(
+                            attempt_metadata, state='running', guardian_pid=process.guardian.pid,
+                            process_group=process.process_group, trial_pid=process.trial_pid,
+                        )
+                        atomic_json(attempt / 'attempt.json', attempt_metadata)
                         code = process.wait(timeout=timeout)
                         status = 'pass' if code == 0 else 'fail' if code == 1 else 'error'
                     except subprocess.TimeoutExpired:

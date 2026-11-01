@@ -20,7 +20,7 @@ SCHEMA = 'process-supervisor-v1'
 STARTUP_TIMEOUT = 10.0
 TERMINATION_GRACE = .5
 TERMINATION_TIMEOUT = 2.0
-IMPLEMENTATION_BYTES = Path(__file__).read_bytes()
+IMPLEMENTATION_BYTES = globals().get('_ADMITTED_SOURCE_BYTES', Path(__file__).read_bytes())
 IMPLEMENTATION_SHA256 = hashlib.sha256(IMPLEMENTATION_BYTES).hexdigest()
 
 
@@ -55,23 +55,27 @@ def _guardian(control_descriptor, config_descriptor, status_descriptor):
                                          'reason': 'process start failed', 'detail': str(error)})
         return 125
 
-    _write_event(status_descriptor, {
-        'schema': SCHEMA, 'event': 'started', 'guardian_pid': os.getpid(),
-        'process_group': group, 'trial_pid': process.pid,
-    })
-    while True:
-        code = process.poll()
-        if code is not None:
-            _write_event(status_descriptor, {'schema': SCHEMA, 'event': 'completed',
-                                             'returncode': code})
-            return 0
-        readable, _, _ = select.select([control_descriptor], [], [], .05)
-        if readable:
-            # No process receives the write end. EOF therefore means that the
-            # caller exited, was killed, or deliberately requested cleanup.
-            if not os.read(control_descriptor, 1):
-                os.killpg(group, signal.SIGKILL)
+    try:
+        _write_event(status_descriptor, {
+            'schema': SCHEMA, 'event': 'started', 'guardian_pid': os.getpid(),
+            'process_group': group, 'trial_pid': process.pid,
+        })
+        while True:
+            code = process.poll()
+            if code is not None:
+                _write_event(status_descriptor, {'schema': SCHEMA, 'event': 'completed',
+                                                 'returncode': code})
+                return 0
+            readable, _, _ = select.select([control_descriptor], [], [], .05)
+            if readable and not os.read(control_descriptor, 1):
+                # EOF means caller death or a deliberate cleanup request.
                 return 125
+    finally:
+        # Keep ownership until the last signal: the live session leader kills
+        # its own group even after the command exits or status delivery fails.
+        # Returning first would strand ordinary grandchildren without a safe
+        # parent-side owner to authenticate the old process-group number.
+        os.killpg(group, signal.SIGKILL)
 
 
 class SupervisedProcess:
@@ -138,6 +142,8 @@ class SupervisedProcess:
             control_write = -1; status_read = -1
             return result
         except BaseException:
+            if control_write >= 0:
+                os.close(control_write); control_write = -1
             if guardian is not None:
                 _terminate_owned_group(guardian, guardian.pid, None)
             raise
@@ -167,8 +173,10 @@ class SupervisedProcess:
 
     def terminate(self):
         self._close_control()
-        _terminate_owned_group(self.guardian, self.process_group, self.trial_pid)
-        self._close_status()
+        try:
+            _terminate_owned_group(self.guardian, self.process_group, self.trial_pid)
+        finally:
+            self._close_status()
 
     def _drain_events(self):
         payload = self._events
@@ -220,11 +228,10 @@ def _read_event(descriptor, initial, timeout):
 
 
 def _known_group_owner_alive(guardian, process_group, trial_pid):
+    # A reaped guardian cannot authenticate a numeric PGID. A former trial PID
+    # may have been reused, so it is never a substitute for the owned child.
     if guardian.poll() is not None:
-        try:
-            return trial_pid is not None and os.getpgid(trial_pid) == process_group
-        except ProcessLookupError:
-            return False
+        return False
     try:
         return os.getpgid(guardian.pid) == process_group == guardian.pid
     except ProcessLookupError:
@@ -232,14 +239,16 @@ def _known_group_owner_alive(guardian, process_group, trial_pid):
 
 
 def _signal_owned_group(guardian, process_group, trial_pid, sig):
+    if process_group != guardian.pid:
+        raise SupervisionError('refusing to signal a process group without ownership')
+    if not _known_group_owner_alive(guardian, process_group, trial_pid):
+        return False
     try:
         os.killpg(process_group, sig)
     except ProcessLookupError:
         return False
     except PermissionError as error:
-        # macOS can report EPERM rather than ESRCH after the group disappeared
-        # between wait/poll and killpg. Ignore it only after both PIDs received
-        # from the owned guardian are independently gone.
+        # Ignore a post-exit EPERM only if the owned guardian is now gone.
         if _known_group_owner_alive(guardian, process_group, trial_pid):
             raise SupervisionError('permission denied signaling an owned process group') from error
         return False
@@ -247,27 +256,19 @@ def _signal_owned_group(guardian, process_group, trial_pid, sig):
 
 
 def _terminate_owned_group(guardian, process_group, trial_pid):
-    """Bound cleanup to a group whose original guardian or trial still owns it."""
-    if guardian.poll() is not None:
-        if trial_pid is None:
-            return
-        try:
-            owned = os.getpgid(trial_pid) == process_group
-        except ProcessLookupError:
-            return
-    else:
-        try:
-            owned = os.getpgid(guardian.pid) == process_group == guardian.pid
-        except ProcessLookupError:
-            return
-    if not owned:
+    """Let EOF request self-cleanup; fall back only while the owner is live."""
+    if process_group != guardian.pid:
         raise SupervisionError('refusing to signal a process group without ownership')
-    if not _signal_owned_group(guardian, process_group, trial_pid, signal.SIGTERM):
+    if guardian.poll() is not None:
         return
+    if not _known_group_owner_alive(guardian, process_group, trial_pid):
+        raise SupervisionError('refusing to signal a process group without ownership')
     try:
         guardian.wait(timeout=TERMINATION_GRACE)
     except subprocess.TimeoutExpired:
         pass
+    # Recheck the still-unreaped owned child immediately before every signal.
+    # A stopped guardian cannot observe EOF, so this fallback remains bounded.
     _signal_owned_group(guardian, process_group, trial_pid, signal.SIGKILL)
     try:
         guardian.wait(timeout=TERMINATION_TIMEOUT)
