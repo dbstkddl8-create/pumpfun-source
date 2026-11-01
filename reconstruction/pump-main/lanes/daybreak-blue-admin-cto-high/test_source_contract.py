@@ -22,7 +22,8 @@ class AdminCtoCompositionContractTests(unittest.TestCase):
     def test_retains_passthrough_compatible_stitch_pair(self):
         fee_guard = (
             "unsafe{core::ptr::read_volatile(holder_key as *const Pubkey as "
-            "*const u8)};if !st.fee_configurable"
+            "*const u8)}/*shim: holder_key byte read placeholder before the "
+            "fee_configurable test*/;if !st.fee_configurable"
         )
         self.assertEqual(self.source.count(fee_guard), 1)
         self.assertEqual(self.source.count("if !collection_native||coin_present{"), 1)
