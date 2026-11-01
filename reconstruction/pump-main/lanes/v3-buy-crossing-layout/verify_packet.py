@@ -40,7 +40,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--signatures', action='store_true', help='Requires solders==0.27.1')
     args = parser.parse_args()
-    for name, digest in read('manifest.json').items():
+    rows = read('manifest.json')
+    # Hashing only the listed names leaves every other file in the folder
+    # unread: a packet that gained a file the manifest never lists still
+    # verified, and that file is exactly what a reader would not check.
+    require(not any(p.is_symlink() or p.suffix in ('.pyc', '.pyo') for p in HERE.rglob('*')),
+            'packet holds a symlink or cached bytecode')
+    shipped = {p.relative_to(HERE).as_posix() for p in HERE.rglob('*')
+               if p.is_file() and p.name != 'manifest.json'}
+    require(set(rows) == shipped, 'packet file set differs from manifest.json')
+    for name, digest in rows.items():
         require(hashlib.sha256((HERE / name).read_bytes()).hexdigest() == digest, name)
     summary = read('SUMMARY.json')
     scores = {k: read(k + '-score.json.gz')['windows'] for k in ('control', 'candidate', 'experimental')}
