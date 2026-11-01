@@ -54,8 +54,8 @@ def main():
     if any(p.is_symlink() or p.suffix in ('.pyc', '.pyo') for p in entries):
         fail('packet contains a symlink or cached Python bytecode')
     listed = set(paths)
-    present = {str(p.relative_to(HERE)) for p in entries
-               if p.is_file() and p.name != 'MANIFEST.json' and '__pycache__' not in p.parts}
+    present = {p.relative_to(HERE).as_posix() for p in entries
+               if p.is_file() and p != HERE / 'MANIFEST.json'}
     if listed != present:
         fail(f'manifest set differs: missing {sorted(present - listed)} extra {sorted(listed - present)}')
     for e in manifest['files']:

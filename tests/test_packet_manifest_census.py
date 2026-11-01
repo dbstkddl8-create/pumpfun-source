@@ -285,6 +285,22 @@ class PacketManifestCensus(unittest.TestCase):
             self.assertIn('cached Python bytecode', result.stdout + result.stderr)
             self.assertFalse(marker.exists(), 'unlisted cached producer executed')
 
+    def test_admin_packets_cannot_hide_members_behind_reserved_names(self):
+        for name in ('pump-fees-admin-cto-sharing-direct-20261030',
+                     'pump-global-admin-sequences-20261030'):
+            for extra in ('nested/MANIFEST.json', '__pycache__/unlisted.txt'):
+                with self.subTest(packet=name, extra=extra), tempfile.TemporaryDirectory() as temporary:
+                    packet = Path(temporary) / 'packet'
+                    shutil.copytree(RESEARCH / name, packet)
+                    path = packet / extra
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(b'{}')
+                    result = run(packet)
+                    text = result.stdout + result.stderr
+                    self.assertNotEqual(result.returncode, 0, text)
+                    self.assertNotIn('/nonexistent/', text)
+                    self.assertIn('file set differs' if 'fees-' in name else 'manifest set differs', text)
+
 
 if __name__ == '__main__':
     unittest.main()

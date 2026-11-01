@@ -1,4 +1,6 @@
 """Verify retained preflight observations; no compiler, VM or network use."""
+if not __debug__:
+    raise SystemExit('Normal Python is required; do not use -O, -OO or PYTHONOPTIMIZE.')
 import gzip
 import hashlib
 import json
