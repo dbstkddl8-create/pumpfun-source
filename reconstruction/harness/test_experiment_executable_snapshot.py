@@ -156,16 +156,23 @@ class ExecutableSnapshotTests(unittest.TestCase):
     def test_loaded_driver_hash_cannot_be_relabelled_by_disk_edit(self):
         driver = self.root / 'driver.py'
         loaded_bytes = Path(runner.__file__).read_bytes()
+        supervisor = self.root / 'process_supervisor.py'
+        supervisor_bytes = runner.SUPERVISOR_PATH.read_bytes()
         driver.write_bytes(loaded_bytes)
+        supervisor.write_bytes(supervisor_bytes)
         spec = importlib.util.spec_from_file_location('snapshot_driver', driver)
         loaded = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(loaded)
         driver.write_bytes(loaded_bytes + b'\n# later disk revision\n')
+        supervisor.write_bytes(supervisor_bytes + b'\n# later supervisor revision\n')
         result = loaded.run_trial(self.source, [sys.executable, '-c', 'pass'],
                                   self.root / 'trial')
         self.assertEqual(result['status'], 'pass')
         self.assertEqual(result['inputs']['runner_sha256'], runner.digest(loaded_bytes))
         self.assertNotEqual(result['inputs']['runner_sha256'], runner.digest(driver.read_bytes()))
+        self.assertEqual(result['inputs']['supervisor_sha256'], runner.digest(supervisor_bytes))
+        self.assertNotEqual(result['inputs']['supervisor_sha256'],
+                            runner.digest(supervisor.read_bytes()))
 
     @unittest.skipUnless(os.environ.get('PUMP_BUILD_TEST_SDK') and shutil.which('rustc'),
                          'requires the explicit SBF SDK and a host rustc')
