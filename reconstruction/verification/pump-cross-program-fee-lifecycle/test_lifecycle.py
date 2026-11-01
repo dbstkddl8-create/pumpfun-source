@@ -6,14 +6,17 @@ import base64
 import copy
 import importlib.util
 import sys
+import shutil
+import subprocess
+from unittest.mock import patch
 import tempfile
 import unittest
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-import lifecycle as life  # noqa: E402
 import verify as reader  # noqa: E402
+life = reader.lifecycle
 
 
 class CrossProgramLifecycleTests(unittest.TestCase):
@@ -120,6 +123,139 @@ class CrossProgramLifecycleTests(unittest.TestCase):
         for name, report in mutations.items():
             with self.subTest(name=name):
                 self.assertTrue(reader.verify(report, life.base.CAPTURED["pump_original"]))
+
+    def test_reader_binds_signed_message_to_exact_instructions(self):
+        changed = copy.deepcopy(self.control)
+        for side in ("original", "candidate"):
+            row = changed[side]["receipts"][0]
+            old = life.Transaction.from_bytes(base64.b64decode(row["transaction_base64"]))
+            replacement = life.Transaction.new_signed_with_payer(
+                [life.set_compute_unit_limit(1_400_000)], life.PAYER.pubkey(),
+                [life.PAYER], old.message.recent_blockhash,
+            )
+            row.update(transaction_base64=base64.b64encode(bytes(replacement)).decode(),
+                       signature=str(replacement.signatures[0]),
+                       signature_verification=list(replacement.verify_with_results()),
+                       message_sha256=life.base.sha(bytes(replacement.message)))
+        changed["mismatch_fields"], changed["comparison"] = life.compare_runs(
+            changed["original"], changed["candidate"]
+        )
+        # Both rows have genuine signatures and agree with each other, but
+        # neither message executes the claimed trade.
+        self.assertEqual(changed["mismatch_fields"], [])
+        self.assertIn("trade-A:signed-instruction-plan", life.validate_run(changed["original"]))
+        self.assertTrue(reader.verify(changed, life.base.CAPTURED["pump_original"]))
+
+    def test_reader_rejects_coerced_signature_and_count_claims(self):
+        for replacement in ([1], [1.0]):
+            changed = copy.deepcopy(self.control)
+            for side in ("original", "candidate"):
+                changed[side]["receipts"][0]["signature_verification"] = replacement
+            self.assertIn("trade-A:signature-verification", life.validate_run(changed["original"]))
+            self.assertTrue(reader.verify(changed, life.base.CAPTURED["pump_original"]))
+        changed = copy.deepcopy(self.control)
+        changed["transaction_count_per_image"] = 11.0
+        self.assertIn("transaction_count_per_image", reader.verify(changed, life.base.CAPTURED["pump_original"]))
+
+    def test_snapshot_membership_covers_constructed_unused_accounts(self):
+        changed = copy.deepcopy(self.control)
+        key = str(life.CREATORS[3].pubkey())
+        for side in ("original", "candidate"):
+            for row in changed[side]["receipts"]:
+                for stage in ("before", "after"):
+                    row[stage].pop(key)
+                    row[stage + "_hash"] = life.base.canonical_hash(row[stage])
+            changed[side]["initial_state_hash"] = changed[side]["receipts"][0]["before_hash"]
+        self.assertIn("trade-A:before-membership", life.validate_run(changed["original"]))
+        self.assertTrue(reader.verify(changed, life.base.CAPTURED["pump_original"]))
+
+    def test_plan_change_is_rejected_before_any_execution(self):
+        with patch.object(life, "STEPS", life.STEPS[:-1]), patch.object(life, "run_image") as run:
+            with self.assertRaisesRegex(ValueError, "plan changed"):
+                life.run_suite(life.base.CAPTURED["pump_original"])
+            run.assert_not_called()
+
+    def test_reader_refuses_duplicate_fields_and_malformed_rows(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "bad.json"
+            path.write_text('{"schema":"first","schema":"second"}')
+            with self.assertRaisesRegex(ValueError, "duplicate JSON field"):
+                reader.read_report(path)
+        for payload in (None, {}, {"original": []}, dict(self.control, original={"receipts": None})):
+            self.assertTrue(reader.verify(payload, life.base.CAPTURED["pump_original"]))
+
+    def test_changed_private_producer_input_fails_before_execution(self):
+        # Copy only the imported source/metadata cohort. The candidate and
+        # captured images deliberately do not exist: admission must run first.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for source in life.PRODUCER_PATHS:
+                target = root / source.relative_to(life.ROOT)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source, target)
+            script = root / Path(life.__file__).relative_to(life.ROOT)
+            code = (
+                'import sys; from pathlib import Path; from unittest.mock import patch; '
+                'sys.path.insert(0,sys.argv[1]); import lifecycle as life; '
+                'life.VERIFIER_PATH.write_bytes(life.VERIFIER_PATH.read_bytes()+b"# changed\\n"); '
+                '\nwith patch.object(life,"run_image") as run:\n'
+                ' try: life.run_suite(Path("missing-candidate.so"))\n'
+                ' except ValueError as error: assert "producer input changed" in str(error)\n'
+                ' else: raise AssertionError("changed helper admitted")\n'
+                ' run.assert_not_called()\n'
+            )
+            result = subprocess.run([sys.executable, '-B', '-c', code, str(script.parent)],
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_reader_ignores_timestamp_valid_executable_bytecode_caches(self):
+        import importlib._bootstrap_external as bytecode
+        for source in (Path(life.__file__), life.BASE_PATH,
+                       life.ROOT / "scripts/pump_differential_output.py"):
+            with self.subTest(source=source.name), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary).resolve()
+                for original in life.PRODUCER_PATHS:
+                    target = root / original.relative_to(life.ROOT)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(original, target)
+                target = root / source.relative_to(life.ROOT)
+                marker = root / "unadmitted-code-ran"
+                injected = compile(f"from pathlib import Path; Path({str(marker)!r}).write_text('ran'); "
+                                   "raise RuntimeError('unadmitted cached code')", str(target), 'exec')
+                cached = Path(importlib.util.cache_from_source(str(target)))
+                cached.parent.mkdir(exist_ok=True)
+                stat = target.stat()
+                cached.write_bytes(bytecode._code_to_timestamp_pyc(injected, int(stat.st_mtime), stat.st_size))
+                # Prove this is a valid, executable cache to the normal loader.
+                control = ('import importlib.util,sys; s=importlib.util.spec_from_file_location("control",sys.argv[1]); '
+                           'm=importlib.util.module_from_spec(s); s.loader.exec_module(m)')
+                result = subprocess.run([sys.executable, '-B', '-c', control, str(target)],
+                                        capture_output=True, text=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertTrue(marker.exists())
+                marker.unlink()
+                folder = root / HERE.relative_to(life.ROOT)
+                code = 'import sys; sys.path.insert(0,sys.argv[1]); import verify; verify.lifecycle.recheck_inputs()'
+                result = subprocess.run([sys.executable, '-B', '-c', code, str(folder)],
+                                        capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertFalse(marker.exists())
+
+    def test_output_cannot_add_a_file_inside_the_source_tree(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "programs/pump"
+            source.mkdir(parents=True)
+            (source / "input.rs").write_text("unchanged")
+            output = source / "new-report.json"
+            with patch.object(life, "ROOT", root), patch.object(life, "run_suite") as run, \
+                 patch.object(sys, "argv", ['lifecycle.py', '--candidate', str(life.base.CAPTURED['pump_original']),
+                                             '--output', str(output)]):
+                with self.assertRaisesRegex(ValueError, "aliases an input"):
+                    life.main()
+                run.assert_not_called()
+            self.assertFalse(output.exists())
+            self.assertEqual((source / "input.rs").read_text(), "unchanged")
 
     def test_canonical_report_bytes_are_deterministic_and_exclusive(self):
         with tempfile.TemporaryDirectory() as temporary:

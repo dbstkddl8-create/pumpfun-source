@@ -18,17 +18,31 @@ from solders.account import Account
 from solders.clock import Clock
 from solders.compute_budget import set_compute_unit_limit
 from solders.instruction import AccountMeta, Instruction
+from solders.message import Message
 from solders.transaction import Transaction
 from solders.transaction_metadata import FailedTransactionMetadata
 
 ROOT = Path(__file__).resolve().parents[3]
 BASE_PATH = ROOT / "reconstruction/verification/pump-admin-cto-stateful/lifecycle.py"
-BASE_SPEC = importlib.util.spec_from_file_location("pump_admin_cto_stateful_base", BASE_PATH)
-if BASE_SPEC is None or BASE_SPEC.loader is None:
-    raise RuntimeError(f"cannot load {BASE_PATH}")
-base = importlib.util.module_from_spec(BASE_SPEC)
-sys.modules[BASE_SPEC.name] = base
-BASE_SPEC.loader.exec_module(base)
+def source_module(name: str, path: Path):
+    """Execute admitted source bytes; -B alone still permits reading a .pyc."""
+    raw = path.read_bytes()
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None:
+        raise RuntimeError(f"cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    module.__dict__["_ADMITTED_SOURCE_BYTES"] = raw
+    sys.modules[name] = module
+    exec(compile(raw, str(path), "exec", dont_inherit=True), module.__dict__)
+    return module, raw
+
+
+# Load both execution-bearing dependencies from the bytes we bind, so an old
+# or injected timestamp-valid bytecode cache cannot change this producer.
+_output, OUTPUT_SOURCE_BYTES = source_module(
+    "pump_differential_output", ROOT / "scripts/pump_differential_output.py"
+)
+base, BASE_SOURCE_BYTES = source_module("pump_admin_cto_stateful_base", BASE_PATH)
 
 AMM_IDL_PATH = ROOT / "evidence/upstream/pump_amm.json"
 TRADE_FIXTURE_PATH = ROOT / "research/imported-lab/analysis/pump_fun/amm-v2-trade-fixture.json"
@@ -68,7 +82,7 @@ TRADE_BASE_AMOUNT = 10**10
 TRADE_MAX_QUOTE = 10**9
 
 PRODUCER_PATHS = (
-    Path(__file__),
+    Path(__file__).resolve(),
     BASE_PATH,
     ROOT / "scripts/pump_differential_output.py",
     base.IDL_PATH,
@@ -80,7 +94,41 @@ PRODUCER_PATHS = (
     TEST_PATH,
 )
 
+LOADED_INPUT_SHA256 = {
+    path.relative_to(ROOT).as_posix(): base.file_sha(path) for path in PRODUCER_PATHS
+}
+LOADED_INPUT_SHA256[BASE_PATH.relative_to(ROOT).as_posix()] = base.sha(BASE_SOURCE_BYTES)
+LOADED_INPUT_SHA256["scripts/pump_differential_output.py"] = base.sha(OUTPUT_SOURCE_BYTES)
+if "_ADMITTED_SOURCE_BYTES" in globals():
+    LOADED_INPUT_SHA256[Path(__file__).resolve().relative_to(ROOT).as_posix()] = base.sha(_ADMITTED_SOURCE_BYTES)
+# The base module records the bytes it admitted when it was loaded. Its decoded
+# IDL/config values must agree with this closure as well as with current files.
+for _name, _digest in base.LOADED_INPUT_SHA256.items():
+    if _name in LOADED_INPUT_SHA256 and LOADED_INPUT_SHA256[_name] != _digest:
+        raise ValueError("producer input changed during import: " + _name)
+
 STRICT_FIELDS = base.STRICT_FIELDS
+
+
+def same_json(left, right) -> bool:
+    """Compare saved claims without Python's bool/int/float coercions."""
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, dict):
+        return left.keys() == right.keys() and all(same_json(left[k], right[k]) for k in left)
+    if isinstance(left, list):
+        return len(left) == len(right) and all(same_json(a, b) for a, b in zip(left, right))
+    return left == right
+
+
+def recheck_inputs() -> None:
+    for name, digest in LOADED_INPUT_SHA256.items():
+        if base.file_sha(ROOT / name) != digest:
+            raise ValueError("producer input changed after import: " + name)
+    if base.sha(base.IDL_BYTES) != LOADED_INPUT_SHA256[base.IDL_PATH.relative_to(ROOT).as_posix()]:
+        raise ValueError("loaded Pump IDL differs from admitted bytes")
+    if base.sha(base.CONFIG_BYTES) != LOADED_INPUT_SHA256[base.CONFIG_PATH.relative_to(ROOT).as_posix()]:
+        raise ValueError("loaded config differs from admitted bytes")
 
 
 def instruction(name: str):
@@ -343,10 +391,76 @@ STEPS = [
 ]
 
 
+# Retain one immutable plan contract per loaded producer. A caller must not
+# shorten the mutable public list while retaining the old declared case count.
+PLAN_SHA256 = base.canonical_hash(STEPS)
+EXPECTED_TRANSACTION_COUNT = 11
+
+
+def checked_steps() -> list[dict]:
+    if len(STEPS) != EXPECTED_TRANSACTION_COUNT or base.canonical_hash(STEPS) != PLAN_SHA256:
+        raise ValueError("lifecycle plan changed after import")
+    return copy.deepcopy(STEPS)
+
+
+def canonical_accounts() -> dict[str, str]:
+    fixture = Harness._mint_fixture(0, "native")
+    return {
+        "pool": str(fixture.pool), "curve": str(fixture.curve),
+        "pool_base": str(base.ata(fixture.pool, fixture.mint, TOKEN)),
+        "pool_quote": str(base.ata(fixture.pool, fixture.quote, TOKEN)),
+        "user_base": str(base.ata(PAYER.pubkey(), fixture.mint, TOKEN)),
+        "user_quote": str(base.ata(PAYER.pubkey(), fixture.quote, TOKEN)),
+        "user_volume": str(base.pda(b"user_volume_accumulator", bytes(PAYER.pubkey()), program=AMM)),
+    }
+
+
+def expected_snapshot_keys() -> set[str]:
+    """Every account constructed by this one fixed fixture, including no-ops."""
+    fixture = Harness._mint_fixture(0, "native")
+    keys = {base.GLOBAL, base.AMM_CONFIG_KEY, PAYER.pubkey(), ADMIN.pubkey(),
+            *(kp.pubkey() for kp in CREATORS), PUMP_EVENT, AMM_EVENT, base.FEES_EVENT,
+            fixture.mint, fixture.quote, fixture.curve, fixture.sharing, fixture.pool,
+            fixture.pool_authority, FEE_CONFIG, BUYBACK_RECIPIENT}
+    keys.update(base.P(value) for value in canonical_accounts().values())
+    for creator in (fixture.sharing, fixture.holder, *(kp.pubkey() for kp in CREATORS)):
+        vault = base.pda(b"creator-vault", bytes(creator))
+        amm_vault = base.pda(b"creator_vault", bytes(creator), program=AMM)
+        keys.update((vault, amm_vault, base.ata(creator, fixture.quote, TOKEN),
+                     base.ata(vault, fixture.quote, TOKEN), base.ata(amm_vault, fixture.quote, TOKEN)))
+    holder_vault = base.pda(b"creator-vault", bytes(fixture.holder))
+    keys.add(base.ata(holder_vault, fixture.quote, TOKEN))
+    return {str(key) for key in keys}
+
+
+def planned_message(row: dict, plan: dict, blockhash) -> Message:
+    """Reconstruct exact instructions/accounts without executing a VM.
+
+    The two instructions that select a current creator read only the declared
+    before-state, already covered by state continuity and creator invariants.
+    """
+    class Snapshot:
+        def get_account(self, key):
+            saved = row["before"][str(key)]
+            if saved is None:
+                raise ValueError("planned instruction needs an absent account")
+            return Account(saved["lamports"], base64.b64decode(saved["data_base64"], validate=True),
+                           base.P(saved["owner"]), saved["executable"], saved["rent_epoch"])
+    harness = object.__new__(Harness)
+    harness.mints = [Harness._mint_fixture(0, "native")]
+    harness.vm = Snapshot()
+    for field, key in canonical_accounts().items():
+        if field in ("pool_base", "pool_quote", "user_base", "user_quote"):
+            setattr(harness, field, base.P(key))
+    harness.volume = base.P(canonical_accounts()["user_volume"])
+    instructions = [set_compute_unit_limit(1_400_000), *harness.instructions_for(plan)]
+    return Message.new_with_blockhash(instructions, PAYER.pubkey(), blockhash)
+
+
 def run_image(image: Path, images=None, case_index: int = 0) -> dict:
     harness = Harness(image, images, case_index)
     initial = harness.snapshot()
-    receipts = [harness.execute_step(step, index) for index, step in enumerate(STEPS, 1)]
+    receipts = [harness.execute_step(step, index) for index, step in enumerate(checked_steps(), 1)]
     return {
         "initial_state_hash": base.canonical_hash(initial),
         "receipts": receipts,
@@ -385,23 +499,38 @@ def validate_run(run: dict) -> list[str]:
     previous = None
     signatures = []
     try:
-        for row in run["receipts"]:
+        plans = checked_steps()
+        if len(run["receipts"]) != EXPECTED_TRANSACTION_COUNT:
+            return ["receipt-count"]
+        if not same_json(run["accounts"], canonical_accounts()):
+            failures.append("canonical-accounts")
+        for row, plan in zip(run["receipts"], plans):
             tag = row["step"]
+            if tag != plan["name"] or not same_json(row["operations"], plan["operations"]):
+                failures.append(tag + ":operation-plan")
             raw = base64.b64decode(row["transaction_base64"], validate=True)
             tx = Transaction.from_bytes(raw)
             required = tx.message.header.num_required_signatures
             checked = list(tx.verify_with_results())
             if (bytes(tx) != raw or required < 1 or len(tx.signatures) != required
                     or checked != [True] * required
-                    or row["signature_verification"] != checked
+                    or not same_json(row["signature_verification"], checked)
                     or row["signature"] != str(tx.signatures[0])
                     or row["message_sha256"] != base.sha(bytes(tx.message))
                     or row["recent_blockhash"] != str(tx.message.recent_blockhash)
                     or tx.message.account_keys[0] != PAYER.pubkey()):
                 failures.append(tag + ":signature-verification")
+            expected_signers = {PAYER.pubkey()}
+            if any(op["op"] == "pump_admin_cto" for op in plan["operations"]):
+                expected_signers.add(ADMIN.pubkey())
+            signers = set(tx.message.account_keys[:required])
+            if signers != expected_signers or bytes(tx.message) != bytes(planned_message(row, plan, tx.message.recent_blockhash)):
+                failures.append(tag + ":signed-instruction-plan")
             signatures.append(str(tx.signatures[0]))
             for stage in ("before", "after"):
                 state = row[stage]
+                if set(state) != expected_snapshot_keys():
+                    failures.append(tag + ":" + stage + "-membership")
                 if row[stage + "_hash"] != base.canonical_hash(state):
                     failures.append(tag + ":" + stage + "-hash")
                 for key, account in state.items():
@@ -411,7 +540,10 @@ def validate_run(run: dict) -> list[str]:
                     data = base64.b64decode(account["data_base64"], validate=True)
                     base.P(account["owner"])
                     if (len(data) != account["data_len"] or base.sha(data) != account["data_sha256"]
-                            or type(account["lamports"]) is not int or account["lamports"] < 0):
+                            or type(account["lamports"]) is not int or account["lamports"] < 0
+                            or type(account["data_len"]) is not int
+                            or type(account["rent_epoch"]) is not int or account["rent_epoch"] < 0
+                            or type(account["executable"]) is not bool):
                         failures.append(tag + ":account-snapshot")
             if previous is None:
                 if run["initial_state_hash"] != base.canonical_hash(row["before"]):
@@ -421,7 +553,7 @@ def validate_run(run: dict) -> list[str]:
             previous = row["after"]
             nonfee = lambda state: {key: value for key, value in state.items() if key != str(PAYER.pubkey())}
             rollback = None if row["error"] is None else nonfee(row["before"]) == nonfee(row["after"])
-            if rollback != row["rollback_nonfee_equal"] or rollback is False:
+            if not same_json(rollback, row["rollback_nonfee_equal"]) or rollback is False:
                 failures.append(tag + ":atomic-rollback")
             if (row["outcome"] != base.outcome(row["logs"], row["error"])
                     or row["failure_class"] != base.failure_class(row["error"])
@@ -485,6 +617,12 @@ def lifecycle_invariants(run: dict) -> list[str]:
             failures.append(name + ":creator-fees-not-zero")
 
     curve = keys["curve"]
+    for name, creator_index in (("admin-A-to-B", 1), ("atomic-sweep-B-to-C-retry", 2)):
+        row = rows[name]
+        curve_bytes = base64.b64decode(row["after"][curve]["data_base64"], validate=True)
+        pool_bytes = base64.b64decode(row["after"][pool]["data_base64"], validate=True)
+        if curve_bytes[49:81] != bytes(CREATORS[creator_index].pubkey()) or pool_bytes[211:243] != bytes(CREATORS[creator_index].pubkey()):
+            failures.append(name + ":creator-transition")
     retry = rows["atomic-sweep-B-to-C-retry"]
     curve_data = base64.b64decode(retry["after"][curve]["data_base64"])
     pool_data = base64.b64decode(retry["after"][pool]["data_base64"])
@@ -536,13 +674,16 @@ def candidate_binding(candidate_sha256: str) -> tuple[dict, dict]:
             "candidate_source_revision": None,
             "current_source_manifest_role": "original-vs-original control only",
         }
-    return {"schema": "unqualified-candidate-v1", "candidate_sha256": candidate_sha256}, {
+    return {"schema": "supplied-candidate-input-v1", "candidate_sha256": candidate_sha256,
+            "limits": "Supplied immutable binary only; this packet establishes no source/build linkage."}, {
         "candidate_source_revision": None,
         "current_source_manifest_role": "review_context_only",
     }
 
 
 def run_suite(candidate: Path) -> dict:
+    recheck_inputs()
+    checked_steps()
     source_files, source_digest = source_manifest()
     snapshots = {name: path.read_bytes() for name, path in base.CAPTURED.items()}
     snapshots["pump_candidate"] = candidate.read_bytes()
@@ -564,6 +705,9 @@ def run_suite(candidate: Path) -> dict:
     ]
     hashes = {name: base.sha(raw) for name, raw in snapshots.items()}
     provenance, source_binding = candidate_binding(hashes["pump_candidate"])
+    recheck_inputs()
+    if source_manifest() != (source_files, source_digest):
+        raise ValueError("source review context changed during run")
     return {
         "schema": "pump-cross-program-fee-lifecycle-v1",
         "scope": "Persistent signed Pump Main/PumpSwap creator-fee lifecycle in independent LiteSVM instances.",
@@ -583,9 +727,7 @@ def run_suite(candidate: Path) -> dict:
         "candidate_provenance": provenance,
         "candidate_provenance_sha256": base.sha(CANDIDATE_PROVENANCE_BYTES),
         "source_binding": source_binding,
-        "producer_input_sha256": {
-            path.relative_to(ROOT).as_posix(): base.file_sha(path) for path in PRODUCER_PATHS
-        },
+        "producer_input_sha256": dict(LOADED_INPUT_SHA256),
         "source_manifest_sha256": source_digest,
         "source_files": source_files,
         "transaction_count_per_image": len(STEPS),
@@ -619,7 +761,7 @@ def write_report(path: Path, report: dict, publisher=None) -> None:
     raw = (json.dumps(report, sort_keys=True, separators=(",", ":")) + "\n").encode()
     if publisher is None:
         publisher = base.PumpReport(path, ROOT, None, __file__, overwrite=False,
-                                    extra_inputs=[*base.CAPTURED.values(), *PRODUCER_PATHS])
+                                    extra_inputs=[*base.CAPTURED.values(), *PRODUCER_PATHS, ROOT / "programs/pump"])
     publisher.write(gzip.compress(raw, mtime=0) if path.suffix == ".gz" else raw)
 
 
@@ -633,8 +775,7 @@ def main() -> int:
         raise SystemExit(f"refusing to overwrite existing report: {args.output}")
     publisher = base.PumpReport(
         args.output, ROOT, args.candidate, __file__, overwrite=False,
-        extra_inputs=[*base.CAPTURED.values(), *PRODUCER_PATHS,
-                      *[ROOT / name for name in source_manifest()[0]]],
+        extra_inputs=[*base.CAPTURED.values(), *PRODUCER_PATHS, ROOT / "programs/pump"],
     )
     report = run_suite(args.candidate.resolve())
     report["negative_controls"] = negative_controls(report)

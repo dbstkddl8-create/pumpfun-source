@@ -82,7 +82,7 @@ Reports classify results as exactly one of `equal_observed_behavior`,
 An original-side receipt or invariant failure is never reported as candidate
 equivalence.
 
-## Immutable inputs used for qualification
+## Historical author qualification inputs
 
 - Captured Pump Main: `7a19affaa2c6187e04a5fe0ea298cee81fa5eb8c24cfcc30d85f615e89f7b02d`
 - Rebuilt Pump Main: `9dfc496c288be94d866cb96652ef4325e194a1cde30665e8414775a2dd2a9890`
@@ -97,6 +97,31 @@ revision and retained build-receipt hashes are in `candidate-provenance.json`.
 The current checkout source manifest is bound as review context only: this work
 did not rebuild Pump and does not claim that the historical candidate was built
 from the current head.
+
+## Current supplied-image admission
+
+Any candidate image may now be compared as `supplied-candidate-input-v1`.
+That label binds the immutable executed bytes only. It explicitly leaves the
+candidate source revision unknown and the current source manifest as review
+context; a build/source acceptance must come from its independent build receipt.
+The original retained `results/current-qualified.json.gz` and
+`candidate-provenance.json` are preserved byte-for-byte as historical author
+receipts. They are not resealed for the reviewed producer and therefore do not
+claim current helper/source admission after these repairs.
+
+The current reader reconstructs each complete signed message from the fixed
+11-step plan and its before-state: instruction data, account ordering and flags,
+program routing, compute budget, payer and exact signer membership must agree.
+Every constructed fixture account must appear in each snapshot. Signature flags
+and count/summary claims use exact JSON value types, and duplicate JSON fields
+are rejected. The producer and reader compile their execution-bearing local
+modules from admitted source bytes rather than accepting executable bytecode
+caches, and producer inputs and source review context are checked again after
+execution. Reports cannot be created inside the source input tree.
+
+These checks establish retained receipt consistency. The `--replay` gate runs
+fresh VMs and is the separate deterministic execution check; saved JSON alone is
+not evidence that an arbitrary claimed VM execution occurred.
 
 ## Reproduce
 
@@ -115,7 +140,7 @@ uv run --offline --python 3.12 --with solders==0.27.1 python \
 Rebuilt comparison and independent replay:
 
 ```sh
-candidate=/path/to/candidate-with-sha256-9dfc496c288be94d866cb96652ef4325e194a1cde30665e8414775a2dd2a9890.so
+candidate=/path/to/reviewed-candidate.so
 out=$(mktemp -d)
 uv run --offline --python 3.12 --with solders==0.27.1 python \
   reconstruction/verification/pump-cross-program-fee-lifecycle/lifecycle.py \
@@ -125,7 +150,7 @@ uv run --offline --python 3.12 --with solders==0.27.1 python \
   --candidate "$candidate" --report "$out/report.json.gz" --replay
 ```
 
-Regression tests (8 tests):
+Regression tests (16 tests):
 
 ```sh
 uv run --offline --python 3.12 --with solders==0.27.1 python -m unittest -v \
