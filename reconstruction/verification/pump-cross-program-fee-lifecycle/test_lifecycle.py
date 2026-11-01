@@ -93,6 +93,19 @@ class CrossProgramLifecycleTests(unittest.TestCase):
             "error": True, "after": True, "events": True, "inner_instructions": True,
         })
 
+    def test_expected_failure_binds_numeric_error_and_instruction_index(self):
+        for replacement in (
+            "TransactionErrorInstructionError((2, Tagged(InstructionErrorCustom(6082))))",
+            "TransactionErrorInstructionError((1, Tagged(InstructionErrorCustom(6081))))",
+        ):
+            changed = copy.deepcopy(self.control)
+            for side in ("original", "candidate"):
+                row = changed[side]["receipts"][5]
+                row["error"] = replacement
+                self.assertEqual(life.validate_run(changed[side]), [])
+                self.assertIn("atomic-unswept-B-to-C:wrong-error", life.lifecycle_invariants(changed[side]))
+            self.assertTrue(reader.verify(changed, life.base.CAPTURED["pump_original"]))
+
     def test_reader_rejects_tampered_receipts_and_cached_summaries(self):
         mutations = {}
 
@@ -181,6 +194,10 @@ class CrossProgramLifecycleTests(unittest.TestCase):
             path.write_text('{"schema":"first","schema":"second"}')
             with self.assertRaisesRegex(ValueError, "duplicate JSON field"):
                 reader.read_report(path)
+            for constant in ("NaN", "Infinity", "-Infinity"):
+                path.write_text('{"unknown":' + constant + '}')
+                with self.assertRaisesRegex(ValueError, "non-finite JSON constant"):
+                    reader.read_report(path)
         for payload in (None, {}, {"original": []}, dict(self.control, original={"receipts": None})):
             self.assertTrue(reader.verify(payload, life.base.CAPTURED["pump_original"]))
 

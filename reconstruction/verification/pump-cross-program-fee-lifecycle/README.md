@@ -150,7 +150,7 @@ uv run --offline --python 3.12 --with solders==0.27.1 python \
   --candidate "$candidate" --report "$out/report.json.gz" --replay
 ```
 
-Regression tests (16 tests):
+Regression tests (17 tests):
 
 ```sh
 uv run --offline --python 3.12 --with solders==0.27.1 python -m unittest -v \

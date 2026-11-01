@@ -31,8 +31,10 @@ def unique_fields(pairs):
 
 def read_report(path: Path) -> dict:
     raw = path.read_bytes()
+    def reject_constant(value):
+        raise ValueError("non-finite JSON constant: " + value)
     return json.loads(gzip.decompress(raw) if path.suffix == ".gz" else raw,
-                      object_pairs_hook=unique_fields)
+                      object_pairs_hook=unique_fields, parse_constant=reject_constant)
 
 
 def expected_program_hashes(candidate: Path) -> dict:

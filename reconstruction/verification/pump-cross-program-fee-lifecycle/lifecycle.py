@@ -608,7 +608,9 @@ def lifecycle_invariants(run: dict) -> list[str]:
 
     if rows["atomic-unswept-B-to-C"]["rollback_nonfee_equal"] is not True:
         failures.append("atomic-unswept-B-to-C:not-rolled-back")
-    if "CreatorFeesNotSwept" not in rows["atomic-unswept-B-to-C"]["outcome"]:
+    failed = rows["atomic-unswept-B-to-C"]
+    if (failed["outcome"] != "error:CreatorFeesNotSwept"
+            or failed["error"] != "TransactionErrorInstructionError((2, Tagged(InstructionErrorCustom(6081))))"):
         failures.append("atomic-unswept-B-to-C:wrong-error")
 
     for name in ("sweep-A", "atomic-sweep-B-to-C-retry", "sweep-C"):
