@@ -128,6 +128,18 @@ class ExperimentRecoveryTests(unittest.TestCase):
         self.assertEqual(json.loads((self.destination / 'latest.json').read_text())['attempt'],
                          first['attempt'])
 
+    def test_published_latest_closes_a_stranded_completed_state(self):
+        first = E.run_trial(self.source, self.pass_command, self.destination)
+        attempt_path = self.destination / first['attempt'] / 'attempt.json'
+        metadata = json.loads(attempt_path.read_text())
+        metadata['state'] = 'completed'
+        metadata.pop('published_ns')
+        E.atomic_json(attempt_path, metadata)
+        second = E.run_trial(self.source, self.pass_command, self.destination)
+        self.assertTrue(second['reused'])
+        self.assertNotIn('recovered', second)
+        self.assertEqual(json.loads(attempt_path.read_text())['state'], 'published')
+
     def test_corrupt_receipts_are_preserved_but_never_accepted(self):
         stale = self.make_stale_attempt(corrupt=True)
         self.destination.joinpath('latest.json').write_bytes(b'{invalid-latest')
