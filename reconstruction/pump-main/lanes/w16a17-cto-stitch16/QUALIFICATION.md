@@ -16,8 +16,8 @@ assumptions are retained without new unsafe operations.
 
 The stripped runtime images differ only in 1,247 CTO text bytes; all other
 runtime sections and file size are unchanged. Unstripped local basic-block
-symbol renaming adds one string-table byte and alignment adds eight file
-bytes; function/exported symbol identities remain unchanged.
+symbol renaming adds one string-table byte, increasing total file size by
+eight bytes after alignment; function/exported symbol identities remain unchanged.
 
 Fresh original/candidate differential passes 388 cases, zero mismatches and
 776 nonempty signed transaction vectors. The persistent lifecycle passes
