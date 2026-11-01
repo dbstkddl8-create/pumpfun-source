@@ -89,6 +89,12 @@ class RunnerParentDeathTests(unittest.TestCase):
 
         attempts = sorted(destination.glob('attempt-*'))
         self.assertEqual(len(attempts), 1)
+        metadata = json.loads((attempts[0] / 'attempt.json').read_text(encoding='utf-8'))
+        self.assertEqual(metadata['schema'], 'experiment-attempt-v1')
+        self.assertIn(metadata['state'], ('staging', 'running'))
+        self.assertEqual(metadata['attempt'], attempts[0].name)
+        self.assertEqual(metadata['key'], __import__('hashlib').sha256(
+            json.dumps(metadata['inputs'], sort_keys=True).encode()).hexdigest())
         self.assertEqual((attempts[0] / 'output/partial.log').read_text(encoding='ascii'),
                          'started\n')
         self.assertFalse((destination / 'latest.json').exists())
