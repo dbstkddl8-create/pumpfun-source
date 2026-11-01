@@ -61,8 +61,8 @@
       "sha256": "c22ebace126744c74c1057a2b8ea791e87f9a1ba6abe84fa45af9976848dd2f9"
     },
     "verify.py": {
-      "bytes": 14631,
-      "sha256": "35af31379484245f8df635f007ef194e68beeba2fdeb8ef470bf48eb48d91198"
+      "bytes": 15493,
+      "sha256": "6012809f73c1547051ed69e2d889b803d890a73a232098570a346dba32dd1201"
     }
   },
   "schema": "pump-native-checkpoint-file-map-v1"

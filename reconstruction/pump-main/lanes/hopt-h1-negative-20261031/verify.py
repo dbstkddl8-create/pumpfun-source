@@ -14,6 +14,19 @@ def pinned(path, expected):
     data = path.read_bytes()
     need(len(data) == expected['bytes'] and sha(data) == expected['sha256'], str(path))
     return data
+def certify_packet():
+    """The packet pins every file it ships; a file with no entry would never be hashed."""
+    rows = js((HERE / 'MANIFEST.json').read_bytes())['files']
+    entries = list(HERE.rglob('*'))
+    need(not any(p.is_symlink() or p.suffix in ('.pyc', '.pyo') for p in entries),
+         'packet holds a symlink or cached bytecode')
+    shipped = {p.relative_to(HERE).as_posix() for p in entries
+               if p.is_file() and p != HERE / 'MANIFEST.json'}
+    need(set(rows) == shipped, 'packet file set differs from MANIFEST.json')
+    for name, expected in rows.items():
+        data = (HERE / name).read_bytes()
+        need(len(data) == expected['bytes'] and sha(data) == expected['sha256'],
+             'packet member differs from MANIFEST.json: ' + name)
 def zip_members(data):
     result = {}
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
@@ -110,6 +123,7 @@ def caller_values(by, tag):
         pending.append((nxt,regs))
     return outputs
 def run(args):
+    certify_packet()
     pins = js((HERE/'inputs.json').read_bytes())
     native = zip_members(pinned(args.native_zip,pins['inputs']['nativeZip']))
     control = zip_members(pinned(args.control_zip,pins['inputs']['controlZip']))
