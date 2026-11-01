@@ -117,7 +117,7 @@ jobs:
               python scripts/test_tooling.py
               python -B scripts/test_pump_text_layout_linker_options.py
               python -B scripts/test_tooling_litesvm_collection.py
-              python -B -m unittest discover -s scripts -p 'test_sbf_backend*.py'
+              python -B scripts/run_discovered_tests.py scripts 'test_sbf_backend*.py' --expect 19
               python -B scripts/test_pump_diagnostic_audit_coverage.py
               python -B tests/test_diagnostic_pair_admission.py
               python -B scripts/test_pump_diagnostic_audit_publication.py
