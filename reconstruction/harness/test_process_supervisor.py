@@ -7,13 +7,14 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import Mock, patch
 
 
 H = Path(__file__).resolve().parent
 sys.path.insert(0, str(H))
 
 from process_supervisor import (SupervisedProcess, SupervisionError,
-                                _terminate_owned_group)
+                                _signal_owned_group, _terminate_owned_group)
 
 
 @unittest.skipUnless(os.name == 'posix', 'requires POSIX process groups')
@@ -108,6 +109,21 @@ time.sleep(30)
         with self.assertRaisesRegex(SupervisionError, 'without ownership'):
             _terminate_owned_group(unrelated, unrelated.pid + 100000, None)
         self.assertIsNone(unrelated.poll())
+
+    def test_post_exit_permission_error_is_not_a_false_cleanup_failure(self):
+        guardian = Mock(pid=1234)
+        guardian.poll.return_value = 0
+        with patch('process_supervisor.os.killpg', side_effect=PermissionError(1, 'denied')):
+            with patch('process_supervisor.os.getpgid', side_effect=ProcessLookupError):
+                self.assertFalse(_signal_owned_group(guardian, 1234, 1235, signal.SIGKILL))
+
+    def test_permission_error_with_live_owner_fails_closed(self):
+        guardian = Mock(pid=1234)
+        guardian.poll.return_value = None
+        with patch('process_supervisor.os.killpg', side_effect=PermissionError(1, 'denied')):
+            with patch('process_supervisor.os.getpgid', return_value=1234):
+                with self.assertRaisesRegex(SupervisionError, 'permission denied'):
+                    _signal_owned_group(guardian, 1234, 1235, signal.SIGKILL)
 
 
 if __name__ == '__main__':
