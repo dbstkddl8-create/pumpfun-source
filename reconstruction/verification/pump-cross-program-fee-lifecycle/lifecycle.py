@@ -32,10 +32,13 @@ BASE_SPEC.loader.exec_module(base)
 
 AMM_IDL_PATH = ROOT / "evidence/upstream/pump_amm.json"
 TRADE_FIXTURE_PATH = ROOT / "research/imported-lab/analysis/pump_fun/amm-v2-trade-fixture.json"
+CANDIDATE_PROVENANCE_PATH = Path(__file__).resolve().parent / "candidate-provenance.json"
 AMM_IDL_BYTES = AMM_IDL_PATH.read_bytes()
 AMM_IDL = json.loads(AMM_IDL_BYTES)
 TRADE_FIXTURE_BYTES = TRADE_FIXTURE_PATH.read_bytes()
 TRADE_FIXTURE = json.loads(TRADE_FIXTURE_BYTES)
+CANDIDATE_PROVENANCE_BYTES = CANDIDATE_PROVENANCE_PATH.read_bytes()
+CANDIDATE_PROVENANCE = json.loads(CANDIDATE_PROVENANCE_BYTES)
 AMM_BUY = next(row for row in AMM_IDL["instructions"] if row["name"] == "buy_v2")
 AMM_SWEEP = next(row for row in AMM_IDL["instructions"] if row["name"] == "sweep_creator_fee")
 AMM_COLLECT = next(row for row in AMM_IDL["instructions"] if row["name"] == "collect_coin_creator_fee")
@@ -70,6 +73,7 @@ PRODUCER_PATHS = (
     base.CONFIG_PATH,
     AMM_IDL_PATH,
     TRADE_FIXTURE_PATH,
+    CANDIDATE_PROVENANCE_PATH,
 )
 
 STRICT_FIELDS = base.STRICT_FIELDS
@@ -517,6 +521,23 @@ def source_manifest() -> tuple[dict, str]:
     return rows, base.canonical_hash(rows)
 
 
+def candidate_binding(candidate_sha256: str) -> tuple[dict, dict]:
+    if candidate_sha256 == CANDIDATE_PROVENANCE["candidate_sha256"]:
+        return CANDIDATE_PROVENANCE, {
+            "candidate_source_revision": CANDIDATE_PROVENANCE["source_revision"],
+            "current_source_manifest_role": "review_context_only",
+        }
+    if candidate_sha256 == base.file_sha(base.CAPTURED["pump_original"]):
+        return {"schema": "captured-original-control-v1", "candidate_sha256": candidate_sha256}, {
+            "candidate_source_revision": None,
+            "current_source_manifest_role": "original-vs-original control only",
+        }
+    return {"schema": "unqualified-candidate-v1", "candidate_sha256": candidate_sha256}, {
+        "candidate_source_revision": None,
+        "current_source_manifest_role": "review_context_only",
+    }
+
+
 def run_suite(candidate: Path) -> dict:
     source_files, source_digest = source_manifest()
     snapshots = {name: path.read_bytes() for name, path in base.CAPTURED.items()}
@@ -537,6 +558,8 @@ def run_suite(candidate: Path) -> dict:
         for side, run in (("original", original), ("candidate", rebuilt))
         for row in run["receipts"] if row["failure_class"] == "infrastructure"
     ]
+    hashes = {name: base.sha(raw) for name, raw in snapshots.items()}
+    provenance, source_binding = candidate_binding(hashes["pump_candidate"])
     return {
         "schema": "pump-cross-program-fee-lifecycle-v1",
         "scope": "Persistent signed Pump Main/PumpSwap creator-fee lifecycle in independent LiteSVM instances.",
@@ -550,9 +573,12 @@ def run_suite(candidate: Path) -> dict:
             "pump": str(PUMP), "pump_amm": str(AMM), "pump_fees": str(FEES),
             "spl_token": str(TOKEN), "associated_token": str(ATA),
         },
-        "program_sha256": {name: base.sha(raw) for name, raw in snapshots.items()},
+        "program_sha256": hashes,
         "idl_sha256": {"pump": base.sha(base.IDL_BYTES), "pump_amm": base.sha(AMM_IDL_BYTES)},
         "fixture_sha256": base.sha(TRADE_FIXTURE_BYTES),
+        "candidate_provenance": provenance,
+        "candidate_provenance_sha256": base.sha(CANDIDATE_PROVENANCE_BYTES),
+        "source_binding": source_binding,
         "producer_input_sha256": {
             path.relative_to(ROOT).as_posix(): base.file_sha(path) for path in PRODUCER_PATHS
         },

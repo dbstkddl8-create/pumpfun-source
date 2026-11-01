@@ -51,6 +51,32 @@ def verify(report: dict, candidate: Path) -> list[str]:
         problems.append("idl_sha256")
     if report.get("fixture_sha256") != lifecycle.base.sha(lifecycle.TRADE_FIXTURE_BYTES):
         problems.append("fixture_sha256")
+    candidate_hash = lifecycle.base.file_sha(candidate)
+    provenance, source_binding = lifecycle.candidate_binding(candidate_hash)
+    if (report.get("candidate_provenance") != provenance
+            or report.get("candidate_provenance_sha256")
+            != lifecycle.base.sha(lifecycle.CANDIDATE_PROVENANCE_BYTES)):
+        problems.append("candidate_provenance")
+    if provenance.get("candidate_sha256") != candidate_hash:
+        problems.append("candidate_provenance_binary")
+    if provenance.get("schema") == "pump-cross-program-candidate-provenance-v1":
+        prior = provenance["prior_qualification"]
+        prior_path = lifecycle.ROOT / prior["path"]
+        if not prior_path.is_file() or lifecycle.base.file_sha(prior_path) != prior.get("sha256"):
+            problems.append("prior_qualification_hash")
+        else:
+            prior_report = read_report(prior_path)
+            if (prior_report.get("schema") != prior.get("schema")
+                    or prior_report.get("program_sha256", {}).get("pump_candidate")
+                    != prior.get("candidate_sha256")
+                    or prior_report.get("transaction_count_per_image")
+                    != prior.get("transaction_count_per_image")
+                    or prior_report.get("mismatch_cases") != prior.get("mismatch_cases")):
+                problems.append("prior_qualification_content")
+    elif provenance.get("schema") != "captured-original-control-v1":
+        problems.append("candidate_provenance_unknown")
+    if report.get("source_binding") != source_binding:
+        problems.append("source_binding")
     expected_inputs = {
         path.relative_to(lifecycle.ROOT).as_posix(): lifecycle.base.file_sha(path)
         for path in lifecycle.PRODUCER_PATHS
