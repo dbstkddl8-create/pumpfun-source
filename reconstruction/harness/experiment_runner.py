@@ -14,6 +14,9 @@ import subprocess
 import tempfile
 import uuid
 
+from process_supervisor import (IMPLEMENTATION_SHA256, SupervisedProcess,
+                                SupervisionError)
+
 # Generated directories are never source, but only the experiment root's
 # target directory is generated build output: nested target directories can
 # contain source, mirroring source_inputs and build_source_manifest.
@@ -118,7 +121,8 @@ def identity(source, command, inputs, timeout, *, environment=None):
             'inputs': hashes, 'input_execute_bits': input_execute_bits(hashes), 'timeout': timeout,
             'declared_input_paths': declared_paths,
             'environment_sha256': digest(json.dumps(environment, sort_keys=True).encode()),
-            'runner_sha256': LOADED_RUNNER_SHA256}
+            'runner_sha256': LOADED_RUNNER_SHA256,
+            'supervisor_sha256': IMPLEMENTATION_SHA256}
 
 
 def admitted_inputs_match(admission):
@@ -269,26 +273,32 @@ def run_trial(source, command, destination, inputs=(), timeout=300):
         argv[0] = admission['invocation']
         status, reason, code = 'error', None, None
         with (attempt / 'stdout.log').open('wb') as stdout, (attempt / 'stderr.log').open('wb') as stderr:
+            process = None
             try:
                 if not admitted_inputs_match(admission):
                     raise OSError('declared input changed before launch')
-                process = subprocess.Popen(argv, executable=admission['executable'], cwd=work,
-                                           stdout=stdout, stderr=stderr, start_new_session=True,
-                                           env=environment)
+                process = SupervisedProcess.start(
+                    argv, executable=admission['executable'], cwd=work,
+                    stdout=stdout, stderr=stderr, env=environment,
+                )
             except OSError as error:
                 reason = 'process start failed'
                 stderr.write((str(error) + '\n').encode('utf-8', errors='replace'))
+            except SupervisionError as error:
+                reason = f'process supervision failed: {error}'
             else:
                 try:
                     code = process.wait(timeout=timeout)
                     status = 'pass' if code == 0 else 'fail' if code == 1 else 'error'
                 except subprocess.TimeoutExpired:
                     reason = 'timeout'
+                except SupervisionError as error:
+                    reason = f'process supervision failed: {error}'
                 finally:
-                    try: os.killpg(process.pid, signal.SIGKILL)
-                    # As in build_process: the session may already be gone.
-                    except (ProcessLookupError, PermissionError): pass
-                    process.wait()
+                    try:
+                        process.terminate()
+                    except SupervisionError as error:
+                        status, reason = 'error', f'process cleanup failed: {error}'
         retained = {}
         try:
             if manifest(source) != admission['source'] or manifest(copied) != admission['source'] or not admitted_inputs_match(admission):
