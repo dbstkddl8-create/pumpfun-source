@@ -86,9 +86,14 @@ def main():
     a = p.parse_args()
     manifest = json.loads((HERE / 'MANIFEST.json').read_text())
     listed = {entry['path']: entry for entry in manifest['files']}
-    actual = {str(path.relative_to(HERE)): path for path in HERE.rglob('*')
-              if path.is_file() and path.name not in ('MANIFEST.json', '.DS_Store')
-              and '.git' not in path.parts and '__pycache__' not in path.parts}
+    if len(listed) != len(manifest['files']):
+        raise SystemExit('duplicate packet manifest path')
+    entries = list(HERE.rglob('*'))
+    if any(path.is_symlink() or path.suffix in ('.pyc', '.pyo') for path in entries):
+        raise SystemExit('packet contains a symlink or cached Python bytecode')
+    actual = {path.relative_to(HERE).as_posix(): path for path in entries
+              if path.is_file() and path != HERE / 'MANIFEST.json'
+              and path.name != '.DS_Store' and '.git' not in path.relative_to(HERE).parts}
     if set(listed) != set(actual):
         print('FAIL: packet file set differs from MANIFEST.json: '
               f'missing={sorted(set(actual) - set(listed))} extra={sorted(set(listed) - set(actual))}')

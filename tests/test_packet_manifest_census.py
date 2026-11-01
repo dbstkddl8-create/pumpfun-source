@@ -103,6 +103,45 @@ class PacketManifestCensus(unittest.TestCase):
         self.assertNotIn('/nonexistent/', result.stdout + result.stderr)
 
 
+    def test_all_three_fee_packet_admissions_preserve_pristine_and_reject_tampering(self):
+        names = ('pump-fees-authority-transition-sequences-20261029',
+                 'pump-fees-buyback-init-withdraw-sequences-20261030',
+                 'pump-fees-social-claim-sequences-20261030')
+        for name in names:
+            for mode in ('pristine', 'changed', 'extra', 'nested', 'symlink', 'cache', 'duplicate'):
+                with self.subTest(packet=name, mode=mode), tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    packet = root / 'packet'
+                    shutil.copytree(RESEARCH / name, packet)
+                    if mode == 'changed': (packet / 'README.md').write_bytes(b'changed')
+                    elif mode == 'extra': (packet / 'runtime/unlisted.bin').write_bytes(b'extra')
+                    elif mode == 'nested': (packet / 'runtime/MANIFEST.json').write_bytes(b'{}')
+                    elif mode == 'symlink':
+                        source = packet / 'README.md'
+                        source.replace(root / 'README.md')
+                        source.symlink_to(root / 'README.md')
+                    elif mode == 'cache':
+                        folder = packet / '__pycache__'
+                        folder.mkdir()
+                        (folder / 'producer.pyc').write_bytes(b'unlisted bytecode')
+                    elif mode == 'duplicate':
+                        path = packet / 'MANIFEST.json'
+                        manifest = json.loads(path.read_text())
+                        manifest['files'].append(dict(manifest['files'][0]))
+                        path.write_text(json.dumps(manifest))
+                    result = run(packet)
+                    text = result.stdout + result.stderr
+                    if mode == 'pristine':
+                        self.assertIn('/nonexistent/', text)
+                        self.assertNotIn('packet file set differs', text)
+                        self.assertNotIn('packet member differs', text)
+                    else:
+                        self.assertNotEqual(result.returncode, 0)
+                        self.assertNotIn('/nonexistent/', text)
+                        self.assertTrue(any(mark in text for mark in
+                            ('packet file set differs', 'packet member differs', 'symlink',
+                             'cached Python bytecode', 'duplicate packet manifest path')), text)
+
     def test_nested_manifest_name_is_not_an_ignored_file(self):
         with tempfile.TemporaryDirectory() as temporary:
             packet = Path(temporary) / 'packet'
