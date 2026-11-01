@@ -11,7 +11,7 @@ import struct
 from pathlib import Path
 
 from lifecycle import MAYHEM, PAYER, ROOT, lifecycle_plan, sha256_bytes
-from producer import CANDIDATE_SHA256, ORIGINAL_SHA256
+from producer import CANDIDATE_SHA256, ORIGINAL_SHA256, source_tree_sha256
 from solders.transaction import Transaction
 
 
@@ -226,6 +226,9 @@ def verify(report_path: Path, candidate: Path) -> dict:
     for relative, expected in report["input_sha256"].items():
         path = ROOT / relative
         require(path.is_file() and sha256_file(path) == expected, f"input hash binding: {relative}")
+    mayhem_sources = [ROOT / relative for relative in report["input_sha256"] if relative.startswith("programs/mayhem/")]
+    require(len(mayhem_sources) == report["mayhem_source_files"], "Mayhem source file count binding")
+    require(source_tree_sha256(mayhem_sources) == report["mayhem_source_tree_sha256"], "Mayhem source tree binding")
     receipt_path = report_path.parent / report["receipt_file"]
     require(sha256_file(receipt_path) == report["receipt_sha256"], "receipt file hash binding")
     rows = [json.loads(line) for line in receipt_path.read_text().splitlines() if line]

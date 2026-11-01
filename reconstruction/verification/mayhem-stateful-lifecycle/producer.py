@@ -46,7 +46,22 @@ def bound_inputs() -> list[Path]:
                     ROOT / f"evidence/{group}/{name}/deployed.so",
                 )
             )
-    return paths
+    paths.extend(path for path in sorted((ROOT / "programs/mayhem").rglob("*")) if path.is_file())
+    paths.extend(
+        path
+        for path in sorted(HERE.iterdir())
+        if path.is_file() and path.suffix in {".py", ".json", ".md"}
+    )
+    return list(dict.fromkeys(paths))
+
+
+def source_tree_sha256(paths: list[Path]) -> str:
+    digest = hashlib.sha256()
+    for path in sorted(paths):
+        digest.update(path.relative_to(ROOT).as_posix().encode())
+        digest.update(b"\0")
+        digest.update(bytes.fromhex(sha256_file(path)))
+    return digest.hexdigest()
 
 
 def produce(candidate: Path, output: Path, original_control: bool = False) -> dict:
@@ -73,7 +88,9 @@ def produce(candidate: Path, output: Path, original_control: bool = False) -> di
 
     receipt_path = output / "receipts.jsonl"
     receipt_path.write_text("".join(canonical_line(row) for row in rows), encoding="utf-8", newline="\n")
-    inputs = {str(path.relative_to(ROOT)): sha256_file(path) for path in bound_inputs()}
+    input_paths = bound_inputs()
+    inputs = {str(path.relative_to(ROOT)): sha256_file(path) for path in input_paths}
+    mayhem_sources = [path for path in input_paths if path.is_relative_to(ROOT / "programs/mayhem")]
     commit = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=ROOT, check=True, capture_output=True, text=True
     ).stdout.strip()
@@ -85,6 +102,8 @@ def produce(candidate: Path, output: Path, original_control: bool = False) -> di
         "original": {"path": str(ORIGINAL.relative_to(ROOT)), "sha256": ORIGINAL_SHA256, "bytes": ORIGINAL.stat().st_size},
         "candidate": {"path": str(candidate), "sha256": sha256_file(candidate), "bytes": candidate.stat().st_size},
         "input_sha256": inputs,
+        "mayhem_source_files": len(mayhem_sources),
+        "mayhem_source_tree_sha256": source_tree_sha256(mayhem_sources),
         "fixture_classification": "synthetic_preinitialized",
         "plan": lifecycle_plan(),
         "receipt_file": receipt_path.name,
