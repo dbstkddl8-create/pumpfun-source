@@ -57,7 +57,12 @@ if __name__=='__main__':
     with Pool(np_) as P: vs=P.map(mkvar,paths,chunksize=4)
     for i,v in enumerate(vs): V[i]=v
     n=len(items); dB=[x['dB'] for x in items]; dM=[x['dM'] for x in items]
-    if mode=='pairs':
+    if mode=='pairsnew':
+        prev={x['path'] for x in json.load(open(a[2]))}
+        isnew=[x['path'] not in prev for x in items]
+        combos=[(i,j) for i,j in itertools.combinations(range(n),2) if (isnew[i] or isnew[j]) and dB[i]+dB[j]==0 and not (dB[i]==0 and dM[i]+dM[j]<-6)]
+        run(items,combos,a[1],np_,'pairsnew')
+    elif mode=='pairs':
         combos=[(i,j) for i,j in itertools.combinations(range(n),2) if dB[i]+dB[j]==0 and not (dB[i]==0 and dM[i]+dM[j]<-6)]
         run(items,combos,a[1],np_,'pairs')
     elif mode=='triples':
