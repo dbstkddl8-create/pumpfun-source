@@ -96,7 +96,7 @@ def main():
   match=all(x[k]==y[k] for k in keys) and [l for l in x['logs'] if l.startswith('Program data:')]==[l for l in y['logs'] if l.startswith('Program data:')] if y else None
   rows.append({'case':c,'original':x,'candidate':y,'match':match})
   if match is False:failures.append(c['name'])
- report={'scope':'Signed synthetic offline crank fixtures; no full-program byte identity claim.','original_sha256':hashlib.sha256(pin_program(ROOT/'evidence/original/pump_fees/deployed.so').read_bytes()).hexdigest(),'candidate_sha256':hashlib.sha256(pin_program(a.candidate).read_bytes()).hexdigest() if a.candidate else None,'cases':rows,'mismatches':failures}
+ report={'scope':'Signed synthetic offline crank fixtures; no full-program byte identity claim.','original_sha256':hashlib.sha256(pin_program(ROOT/'evidence/original/pump_fees/deployed.so').read_bytes()).hexdigest(),'candidate_sha256':hashlib.sha256(pin_program(a.candidate).read_bytes()).hexdigest() if a.candidate else None,'case_count':len(rows),'cases':rows,'mismatches':failures}
  publisher.write((json.dumps(report,indent=2)+'\n').encode('utf-8'))
  print('Cases',len(rows),'mismatches',failures)
  if failures:raise SystemExit(1)
