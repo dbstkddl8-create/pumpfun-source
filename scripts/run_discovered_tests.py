@@ -18,6 +18,8 @@ def main(argv):
     parser.add_argument('--expect', type=int, required=True,
                         help='Case count the pattern must discover')
     options = parser.parse_args(argv)
+    if options.expect <= 0:
+        parser.error('--expect must be positive')
     suite = unittest.defaultTestLoader.discover(
         str(options.start), pattern=options.pattern, top_level_dir=str(options.start))
     result = unittest.TextTestRunner(verbosity=2).run(suite)

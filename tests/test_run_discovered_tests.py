@@ -51,5 +51,20 @@ class DiscoveredTestsRunnerTests(unittest.TestCase):
         self.assertIn("ran 0", completed.stderr)
 
 
+    def test_zero_expected_does_not_admit_empty_discovery(self):
+        completed = subprocess.run(
+            [sys.executable, "-B", str(RUNNER), str(self.directory), "missing*.py",
+             "--expect", "0"], capture_output=True, text=True)
+        self.assertEqual(2, completed.returncode)
+        self.assertIn("--expect must be positive", completed.stderr)
+
+    def test_all_skipped_is_refused_at_the_expected_count(self):
+        (self.directory / "cases.py").write_text(
+            CASE_FILE.replace("class Cases", "@unittest.skip('control')\nclass Cases"))
+        completed = self.run_runner("--expect", "2")
+        self.assertEqual(1, completed.returncode)
+        self.assertIn("ran 2; skipped 2", completed.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
