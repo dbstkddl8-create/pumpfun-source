@@ -63,7 +63,9 @@ except t1n (-24 B, -1 M), which g1/crl3 already contain.
 g1+t1n (jumps re-fixed) gives at most 2,252, and that +1 needs the deletion of the `max_fee` reload at cand 0x15b0
 (`ldxdw r3,[r10-0x948]` before the 338 `jlt`), a register-allocation artefact. crl3+t1n is the best positional fit
 measured (drift through the TCF is 0, so its positional slots fall to 3,063-3,082 with a late 48 B repay), but deleting 48 B
-of its own unmatched code costs 3-5 M (2,246-2,248): the repay cannot be had for free even in the oracle.
+of its own unmatched code costs 3-5 M (2,246-2,248): the repay cannot be had for free even in the oracle. The same bound
+for crl3+g1+t1n (27,488 B, 2,252), 11 unmatched instructions deleted inside one region: sweep head 2,248, TCF 2,242,
+sharing CPI 2,248, post-CPI/native arm 2,249 (3,123 slots), wallet 2,248. So no -88 B repay keeps it above main either.
 
 ## 3. Recaptures and composite builds on 599891304 (raw-IR oracle, `tools/scr.py` + `tools/g16.py`; `data/res-5998913.jsonl`)
 
@@ -107,6 +109,25 @@ of its own unmatched code costs 3-5 M (2,246-2,248): the repay cannot be had for
 | cT6 | the same through `let cr=&a.bonding_curve.creator` | 27,560 | +160 | 1,587 | -664 |
 
 Every -8 B knob added to g1+t1n costs 4-6 M. The shared entry copy (`cT*`) collapses: `cr` stays live across validate.
+
+**CtoState block spellings (orig 0x420-0x540 copies the creator ascending from `r9=&curve.creator` after three bool
+stores; main copies it descending from `r7+8` before them).**
+
+| name | spelling | bytes | M | note |
+| --- | --- | ---: | ---: | --- |
+| csA | `let cref=&a.bonding_curve.creator;` before quote_locked, `creator:*cref` | 27,400 | 2,251 | byte-identical to main |
+| csC | `creator:Pubkey::new_from_array(a.bonding_curve.creator.to_bytes())` | 27,400 | 2,251 | byte-identical |
+| csI | `creator:{let c:&Pubkey=&a.bonding_curve.creator;*c}` | 27,400 | 2,251 | byte-identical |
+| csF | `let creator=a.bonding_curve.creator;` before the literal, field shorthand | 27,400 | 2,250 | -1 |
+| csH | `cref` shared by the shared test and the literal | 27,464 | 1,593 | collapses |
+| **fl1** = fl3 | curve flags read before quote_locked (`let mayhem=..;let holder_reward=..;let cashback_coin=..;`, the original loads them right after the shared test and spills them) | **27,352** | 2,115 | **front +12** (entry.st +10, holder_head +2, fee_chain +1, join +1), back -148 (sweep head -15, TCF -60, sharing CPI -57, wallet -8) |
+| fl2 | the same reads before the holder PDA | 27,464 | 1,579 | collapses |
+
+fl1 is another faithful front (the original's early flag loads) whose back collapses under main's back-half tuning, the
+pattern of VC (w16a05) and w16a09's unions. fl1's front spliced onto main's back (w16a05 `splice2.py`, clean: 157 calls,
+error lines intact) is M 2,257 at 27,440 B (cut orig 0x750), 2,258 at 0x1008 and 2,260 at 27,464 B (cut 0x1c68): the
+front is worth +9 and is 64 B longer than main's front, about the length the original's entry has over main's.
+fl1 + crl3 + t1n collapses (27,512 B, 1,648) and fl1 + hkl3 stays in the fl1 basin (27,312 B, 2,111).
 
 ## 4. Near-tie table (M 2,250-2,251 with more original skeleton than main)
 

@@ -229,6 +229,38 @@
    "hkl3+lfb5+lkb6": [
     27400,
     2250
+   ],
+   "csA creator:*cref (pointer before quote_locked)": [
+    27400,
+    2251,
+    "byte-identical"
+   ],
+   "csC new_from_array": [
+    27400,
+    2251,
+    "byte-identical"
+   ],
+   "csI block deref": [
+    27400,
+    2251,
+    "byte-identical"
+   ],
+   "csF creator local + shorthand": [
+    27400,
+    2250
+   ],
+   "csH cref shared by shared test and literal": [
+    27464,
+    1593
+   ],
+   "fl1/fl3 curve flags read before quote_locked": [
+    27352,
+    2115,
+    "front +12 (entry.st +10), back -148"
+   ],
+   "fl2 flags before the holder PDA": [
+    27464,
+    1579
    ]
   }
  },
@@ -238,7 +270,9 @@
   "0 B + 0 B pairs and 0 B triples (ties only)",
   "one entry creator copy shared by the shared test and the shared-arm target (collapses -333..-664)",
   "g1-family variants cs7/tf_f6 with t1n (2,249)",
-  "outline base tAn2 with library repays (no +360 B set)"
+  "outline base tAn2 with library repays (no +360 B set)",
+  "CtoState creator through a pointer/explicit copy (byte-identical) or a shared cref (collapse)",
+  "curve flags read early (fl1: front +12 but back -148; fl2 collapses)"
  ],
  "unresolved": [
   "a faithful 16-120 B repay after the sweep for the entry/validate size leads (library repays below -24 B cost >= 3 M)",
@@ -247,6 +281,7 @@
  ],
  "next_ideas": [
   "Look for main-only code after the TCF that a source spelling can drop (xled ours-only runs at cand 0x4068-0x4158 and 0x41f8-0x4300 in the sharing CPI build, the join at 0x1830-0x1920); pair it with crl2/crl3 or crl3+g1+t1n",
+  "fl1 (curve flags read before quote_locked, the original's early loads) is a new faithful front: +12 M in entry.st/holder_head at -48 B net, back -148 under main's back-half tuning; re-tune the back half under it as w16a14 does for VC",
   "Rebuild the catalog with tools/cat16b.py --prev and splice new captures with scr16.py pairsnew/lead before building"
  ]
 }
