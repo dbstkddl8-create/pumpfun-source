@@ -434,6 +434,12 @@ def run_trial(source, command, destination, inputs=(), timeout=300):
             except (OSError, ValueError, json.JSONDecodeError):
                 previous = None
             if previous is not None and retained_result_valid(previous, admission, key, destination):
+                for metadata in completed:
+                    if metadata['attempt'] == previous['attempt']:
+                        atomic_json(destination / metadata['attempt'] / 'attempt.json',
+                                    dict(metadata, state='published',
+                                         published_ns=time.time_ns()))
+                        break
                 return dict(previous, reused=True, recovered_attempts=recovered)
             receipt_history.append(retain_receipt_history(destination, receipt_path))
         # A crash after the attempt receipt was synced but before latest.json
